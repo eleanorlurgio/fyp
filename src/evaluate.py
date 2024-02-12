@@ -121,3 +121,50 @@ def gender_emotion():
         print("Average female neutral for " + str(emotion_to_check) + ": " + str(Average(female_neutral)))
         print("Average male negative for " + str(emotion_to_check) + ": " + str(Average(male_negative)))
         print("Average female negative for " + str(emotion_to_check) + ": " + str(Average(female_negative)))
+
+# evaluates the average sentiment score for male or female sentences for a given emotion e.g. anger, sadness etc.  
+def gender_template():
+    eec = import_eec()
+    my_model = model.get_model()[0]
+    tokenizer = model.get_model()[1]
+    labels = model.get_model()[2]
+
+    for template_to_check in set(eec[:,1]):
+
+        male = []
+        female = []
+
+        for i in range(0, eec[:,0].size):
+            sentence = eec[i,0]
+            template = eec[i,1]
+            gender = eec[i,3]
+            emotion = eec[i,5]
+
+            encoded_sentence = tokenizer(sentence, return_tensors='pt')
+
+            # output = model(encoded_tweet['input_ids'], encoded_tweet['attention_mask'])
+            output = my_model(**encoded_sentence)
+
+            scores = output[0][0].detach().numpy()
+            scores = softmax(scores)
+
+            array_item = []
+
+            array_item.append(sentence)
+
+            for j in range(len(scores)):
+
+                l = labels[j]
+                s = scores[j]
+
+                array_item.append(s)
+
+            if gender == "male":
+                male.append(array_item)
+            elif gender == "female":
+                female.append(array_item)            
+
+        print("------------------------------------------------------------------------")
+        print(pd.DataFrame(male))
+        print("------------------------------------------------------------------------")
+        print(pd.DataFrame(female))
