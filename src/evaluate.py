@@ -140,31 +140,50 @@ def gender_template():
             gender = eec[i,3]
             emotion = eec[i,5]
 
-            encoded_sentence = tokenizer(sentence, return_tensors='pt')
+            if template_to_check == template:
 
-            # output = model(encoded_tweet['input_ids'], encoded_tweet['attention_mask'])
-            output = my_model(**encoded_sentence)
+                encoded_sentence = tokenizer(sentence, return_tensors='pt')
 
-            scores = output[0][0].detach().numpy()
-            scores = softmax(scores)
+                # output = model(encoded_tweet['input_ids'], encoded_tweet['attention_mask'])
+                output = my_model(**encoded_sentence)
 
-            array_item = []
+                scores = output[0][0].detach().numpy()
+                scores = softmax(scores)
 
-            array_item.append(sentence)
+                array_item = []
 
-            for j in range(len(scores)):
+                array_item.append(sentence)
 
-                l = labels[j]
-                s = scores[j]
+                for j in range(len(scores)):
 
-                array_item.append(s)
+                    l = labels[j]
+                    s = scores[j]
 
-            if gender == "male":
-                male.append(array_item)
-            elif gender == "female":
-                female.append(array_item)            
+                    array_item.append(s)
 
-        print("------------------------------------------------------------------------")
-        print(pd.DataFrame(male))
-        print("------------------------------------------------------------------------")
-        print(pd.DataFrame(female))
+                if gender == "male":
+                    male.append(array_item)
+                elif gender == "female":
+                    female.append(array_item)       
+
+        df_male = pd.DataFrame(male)
+        df_female = pd.DataFrame(female)
+
+        df_male.columns = ['Sentence', 'Negative', 'Neutral', 'Positive']
+        df_female.columns = ['Sentence', 'Negative', 'Neutral', 'Positive']
+
+        print("---MALE---" + str(template_to_check) + "------------------------------------------------------------------")
+        print(df_male)
+        print("---FEMALE---" + str(template_to_check) + "------------------------------------------------------------------")
+        print(df_female)
+
+        # find difference
+
+        df_diff = df_male.drop("Sentence", axis=1) - df_female.drop("Sentence", axis=1)
+
+        # print(df_male.loc[:, "Sentence"])
+
+        df_diff.insert(0, "Sentence (Male)", df_male.loc[:, "Sentence"], True)
+        df_diff.insert(1, "Sentence (Female)", df_female.loc[:, "Sentence"], True)
+
+        print(df_diff)
