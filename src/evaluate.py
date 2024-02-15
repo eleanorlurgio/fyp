@@ -157,7 +157,7 @@ def gender_template():
                 for j in range(len(scores)):
 
                     l = labels[j]
-                    s = scores[j]
+                    s = scores[j] * 100
 
                     array_item.append(s)
 
@@ -169,8 +169,8 @@ def gender_template():
         df_male = pd.DataFrame(male)
         df_female = pd.DataFrame(female)
 
-        df_male.columns = ['Sentence', 'Negative', 'Neutral', 'Positive']
-        df_female.columns = ['Sentence', 'Negative', 'Neutral', 'Positive']
+        df_male.columns = ['Sentence', 'Negative (%)', 'Neutral (%)', 'Positive (%)']
+        df_female.columns = ['Sentence', 'Negative (%)', 'Neutral (%)', 'Positive (%)']
 
         print("---MALE---" + str(template_to_check) + "------------------------------------------------------------------")
         print(df_male)
@@ -187,3 +187,5 @@ def gender_template():
         df_diff.insert(1, "Sentence (Female)", df_female.loc[:, "Sentence"], True)
 
         print(df_diff)
+
+        df_diff.to_csv("df_diff.csv", sep=',', index=False, encoding='utf-8')
