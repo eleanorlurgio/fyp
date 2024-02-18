@@ -2,10 +2,11 @@ import numpy as np
 import pandas as pd
 from scipy.special import softmax
 import model
+import example_model
 
 def import_eec():
     # import EEC data set
-    df = pd.read_csv('src\Equity-Evaluation-Corpus.csv', usecols=["Sentence", "Template","Person","Gender","Race","Emotion","Emotion word"])
+    df = pd.read_csv('src\datasets\Equity-Evaluation-Corpus.csv', usecols=["Sentence", "Template","Person","Gender","Race","Emotion","Emotion word"])
     eec = df.to_numpy()
     return eec
 
@@ -123,69 +124,67 @@ def gender_emotion():
         print("Average female negative for " + str(emotion_to_check) + ": " + str(Average(female_negative)))
 
 # evaluates the average sentiment score for male or female sentences for a given emotion e.g. anger, sadness etc.  
-def gender_template():
+def gender_evaluate():
     eec = import_eec()
     my_model = model.get_model()[0]
     tokenizer = model.get_model()[1]
     labels = model.get_model()[2]
 
-    for template_to_check in set(eec[:,1]):
+    male = []
+    female = []
 
-        male = []
-        female = []
+    for i in range(0, eec[:,0].size):
+        sentence = eec[i,0]
+        template = eec[i,1]
+        gender = eec[i,3]
+        emotion = eec[i,5]
 
-        for i in range(0, eec[:,0].size):
-            sentence = eec[i,0]
-            template = eec[i,1]
-            gender = eec[i,3]
-            emotion = eec[i,5]
+        encoded_sentence = tokenizer(sentence, return_tensors='pt')
 
-            if template_to_check == template:
+        # output = model(encoded_tweet['input_ids'], encoded_tweet['attention_mask'])
+        output = my_model(**encoded_sentence)
 
-                encoded_sentence = tokenizer(sentence, return_tensors='pt')
+        scores = output[0][0].detach().numpy()
+        scores = softmax(scores)
 
-                # output = model(encoded_tweet['input_ids'], encoded_tweet['attention_mask'])
-                output = my_model(**encoded_sentence)
+        array_item = []
 
-                scores = output[0][0].detach().numpy()
-                scores = softmax(scores)
+        array_item.append(sentence)
 
-                array_item = []
+        for j in range(len(scores)):
 
-                array_item.append(sentence)
+            l = labels[j]
+            s = scores[j] * 100
 
-                for j in range(len(scores)):
+            array_item.append(s)
 
-                    l = labels[j]
-                    s = scores[j] * 100
+        if gender == "male":
+            male.append(array_item)
+        elif gender == "female":
+            female.append(array_item)       
 
-                    array_item.append(s)
+    df_male = pd.DataFrame(male)
+    df_female = pd.DataFrame(female)
 
-                if gender == "male":
-                    male.append(array_item)
-                elif gender == "female":
-                    female.append(array_item)       
+    df_male.columns = ['Sentence', 'Negative (%)', 'Neutral (%)', 'Positive (%)']
+    df_female.columns = ['Sentence', 'Negative (%)', 'Neutral (%)', 'Positive (%)']
 
-        df_male = pd.DataFrame(male)
-        df_female = pd.DataFrame(female)
+    print("---MALE---------------------------------------------------------------------")
+    print(df_male)
+    print("---FEMALE---------------------------------------------------------------------")
+    print(df_female)
 
-        df_male.columns = ['Sentence', 'Negative (%)', 'Neutral (%)', 'Positive (%)']
-        df_female.columns = ['Sentence', 'Negative (%)', 'Neutral (%)', 'Positive (%)']
+    # find difference
 
-        print("---MALE---" + str(template_to_check) + "------------------------------------------------------------------")
-        print(df_male)
-        print("---FEMALE---" + str(template_to_check) + "------------------------------------------------------------------")
-        print(df_female)
+    df_diff = df_male.drop("Sentence", axis=1) - df_female.drop("Sentence", axis=1)
 
-        # find difference
+    df_diff.insert(0, "Sentence (Male)", df_male.loc[:, "Sentence"], True)
+    df_diff.insert(1, "Sentence (Female)", df_female.loc[:, "Sentence"], True)
 
-        df_diff = df_male.drop("Sentence", axis=1) - df_female.drop("Sentence", axis=1)
+    df_diff.to_csv("src\datasets\df_diff.csv", sep=',', index=False, encoding='utf-8')
 
-        # print(df_male.loc[:, "Sentence"])
-
-        df_diff.insert(0, "Sentence (Male)", df_male.loc[:, "Sentence"], True)
-        df_diff.insert(1, "Sentence (Female)", df_female.loc[:, "Sentence"], True)
-
+def get_gender_evaluate():
+        
+        df_diff = pd.read_csv('src\datasets\df_diff.csv')
+        
         print(df_diff)
-
-        df_diff.to_csv("df_diff.csv", sep=',', index=False, encoding='utf-8')

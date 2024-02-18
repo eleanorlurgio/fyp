@@ -3,3 +3,5 @@ pip install pandas
 pip install scipy
 pip install transformers
 pip install torch
+pip install datasets
+pip install transformers[torch]
