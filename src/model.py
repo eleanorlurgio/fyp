@@ -34,92 +34,130 @@ def get_model():
 
     return model, tokenizer, labels
 
+def scaled_dot_product(q, k, v, mask=None):
 
+    score_matrix = q@k.mT
+    scaled_score_matrix = score_matrix / math.sqrt(q.shape[-1])
+    attention_weight = torch.nn.functional.softmax(scaled_score_matrix)
+    output = attention_weight@v
 
-def compute_metrics(eval_pred):
-   load_accuracy = load_metric("accuracy")
-   load_f1 = load_metric("f1")
-  
-   logits, labels = eval_pred
-#    labels = ['Negative', 'Neutral', 'Positive']
+    return output, attention_weight
 
-   predictions = np.argmax(logits, axis=-1)
-   accuracy = load_accuracy.compute(predictions=predictions, references=labels)["accuracy"]
-   f1 = load_f1.compute(predictions=predictions, references=labels)["f1"]
-   return {"accuracy": accuracy, "f1": f1}
+class SelfAttention(nn.Module):
+    def __init__(self, k, heads=4, mask=False):
+      
+        super().__init__()
+        
+        assert k % heads == 0
+        
+        self.k, self.heads = k, heads
 
-def main():
-    dataset = load_dataset("sst", "default")
+        # These compute the queries, keys and values for all
+        # heads
+        self.tokeys    = nn.Linear(k, k, bias=False)
+        self.toqueries = nn.Linear(k, k, bias=False)
+        self.tovalues  = nn.Linear(k, k, bias=False)
 
-    # Shows train / validation / test split
-    # print(dataset)
+        # This will be applied after the multi-head self-attention operation.
+        self.unifyheads = nn.Linear(k, k)
 
-    device = 'cuda' if cuda.is_available() else 'cpu'
+    def forward(self, x):
 
-    # load model and tokenizer
-    roberta = "roberta-base"
+        b, t, k = x.size()
+        h = self.heads
 
-    model = AutoModelForSequenceClassification.from_pretrained(roberta, num_labels=5)
-    tokenizer = AutoTokenizer.from_pretrained(roberta)
+        queries = self.toqueries(x)
+        keys    = self.tokeys(x)   
+        values  = self.tovalues(x)
 
-    dataset = dataset.remove_columns("tokens")
-    dataset = dataset.remove_columns("tree")
+        s = k // h
 
-    # rating = ["foo"] * len(dataset)
-    # dataset = dataset.add_column("rating", rating)
+        keys    = keys.view(b, t, h, s)
+        queries = queries.view(b, t, h, s)
+        values  = values.view(b, t, h, s)
 
-    print(dataset[1])
+        # - fold heads into the batch dimension
+        keys = keys.transpose(1, 2).contiguous().view(b * h, t, s)
+        queries = queries.transpose(1, 2).contiguous().view(b * h, t, s)
+        values = values.transpose(1, 2).contiguous().view(b * h, t, s)
 
-    train_dataset = dataset["train"]
-    test_dataset = dataset["test"]
+            # Get dot product of queries and keys, and scale
+        dot = torch.bmm(queries, keys.transpose(1, 2))
+        # -- dot has size (b*h, t, t) containing raw weights
 
-    # def convert_label(dataset):
-    #     'positive' if (dataset["label"] > 0.5) else 'negative'
-    #     return dataset
+        # scale the dot product
+        dot = dot / (k ** (1/2))
+        
+        # normalize 
+        dot = F.softmax(dot, dim=2)
+        # - dot now contains row-wise normalized weights
 
-    # train_dataset = train_dataset.map(convert_label)
-    # test_dataset = test_dataset.map(convert_label)
+        # apply the self attention to the values
+        out = torch.bmm(dot, values).view(b, h, t, s)
 
-
-
-    print(train_dataset["label"])
-
-    def preprocess_function(examples):
-        return tokenizer(examples["sentence"], truncation=True)
-
-
-    tokenized_train = train_dataset.map(preprocess_function, batched=True)
-    tokenized_test = test_dataset.map(preprocess_function, batched=True)
-
-    data_collator = DataCollatorWithPadding(tokenizer=tokenizer)
-
-    # print(TrainingArguments.size(), labels.size())
-
-    repo_name = "results"
- 
-    training_args = TrainingArguments(
-    output_dir= repo_name,
-    learning_rate=2e-5,
-    per_device_train_batch_size=16,
-    per_device_eval_batch_size=16,
-    num_train_epochs=2,
-    weight_decay=0.01,
-    save_strategy="epoch",
-    push_to_hub=True,
-    )
+        # swap h, t back, unify heads
+        out = out.transpose(1, 2).contiguous().view(b, t, s * h)
+        
+        return self.unifyheads(out)
     
-    trainer = Trainer(
-    model=model,
-    args=training_args,
-    train_dataset=tokenized_train,
-    eval_dataset=tokenized_test,
-    tokenizer=tokenizer,
-    data_collator=data_collator,
-    compute_metrics=compute_metrics,
-    )
+class TransformerBlock(nn.Module):
+  def __init__(self, k, heads):
+    super().__init__()
 
-    # target = torch.unsqueeze(target)
+    self.attention = SelfAttention(k, heads=heads)
 
-    trainer.train()
+    self.norm1 = nn.LayerNorm(k)
+    self.norm2 = nn.LayerNorm(k)
 
-    trainer.evaluate()
+    self.ff = nn.Sequential(
+      nn.Linear(k, 4 * k),
+      nn.ReLU(),
+      nn.Linear(4 * k, k))
+
+  def forward(self, x):
+    attended = self.attention(x)
+    x = self.norm1(attended + x)
+
+    fedforward = self.ff(x)
+    return self.norm2(fedforward + x)
+  
+class Transformer(nn.Module):
+    def __init__(self, k, heads, depth, seq_length, num_tokens, num_classes):
+        super().__init__()
+
+        self.num_tokens = num_tokens
+        self.token_emb = nn.Embedding(num_tokens, k)
+        self.pos_emb = nn.Embedding(seq_length, k)
+
+		# The sequence of transformer blocks that does all the
+		# heavy lifting
+        tblocks = []
+        for i in range(depth):
+            tblocks.append(TransformerBlock(k=k, heads=heads))
+        self.tblocks = nn.Sequential(*tblocks)
+
+		# Maps the final output sequence to class logits
+        self.toprobs = nn.Linear(k, num_classes)
+
+    def forward(self, x):
+        """
+        :param x: A (b, t) tensor of integer values representing
+                  words (in some predetermined vocabulary).
+        :return: A (b, c) tensor of log-probabilities over the
+                 classes (where c is the nr. of classes).
+        """
+		# generate token embeddings
+        tokens = self.token_emb(x)
+        b, t, k = tokens.size()
+
+		# generate position embeddings
+        positions = torch.arange(t)
+        positions = self.pos_emb(positions)[None, :, :].expand(b, t, k)
+
+        x = tokens + positions
+        x = self.tblocks(x)
+
+        # Average-pool over the t dimension and project to class
+        # probabilities
+        x = self.toprobs(x.mean(dim=1))
+        return F.log_softmax(x, dim=1)
