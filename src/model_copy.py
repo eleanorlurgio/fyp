@@ -18,7 +18,7 @@ from urllib.error import HTTPError
 from torch import cuda
 from transformers import DataCollatorWithPadding
 from transformers import TrainingArguments, Trainer
-from sklearn.model_selection import train_test_split
+# from sklearn.model_selection import train_test_split
 
 def get_model():
 

@@ -51,12 +51,6 @@ def compute_metrics(eval_pred):
 def main():
     #
     dataset = load_dataset("sst", "default")
-    df_train = pd.DataFrame(dataset['train'])
-    df_validation = pd.DataFrame(dataset['validation'])
-    df_test = pd.DataFrame(dataset['test'])
-
-    # Shows train / validation / test split
-    print(df_train)
 
     device = 'cuda' if cuda.is_available() else 'cpu'
 
