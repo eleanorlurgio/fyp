@@ -30,6 +30,7 @@ def compute_metrics(eval_pred):
    predictions = np.argmax(logits, axis=-1)
    accuracy = load_accuracy.compute(predictions=predictions, references=labels)["accuracy"]
    f1 = load_f1.compute(predictions=predictions, references=labels, average="weighted")["f1"]
+   print("\n" + "Accuracy:" + str(accuracy) + ", F1:" + str(f1))
    return {"accuracy": accuracy, "f1": f1}
 
 def train_model():
@@ -90,9 +91,9 @@ def train_model():
 
     trainer.train()
 
-    trainer.save_model("saved_model")
-
     trainer.evaluate()
+
+    trainer.save_model("saved_model")
     
 
 def load_model():
