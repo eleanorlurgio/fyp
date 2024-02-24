@@ -18,17 +18,18 @@ from urllib.error import HTTPError
 from torch import cuda
 from transformers import DataCollatorWithPadding
 from transformers import TrainingArguments, Trainer
+import evaluate
 
 # defines evaluation metrics
 def compute_metrics(eval_pred):
-   load_accuracy = load_metric("accuracy")
-   load_f1 = load_metric("f1")
+   load_accuracy = evaluate.load("accuracy", trust_remote_code=True)
+   load_f1 = evaluate.load("f1")
   
    logits, labels = eval_pred
 
    predictions = np.argmax(logits, axis=-1)
    accuracy = load_accuracy.compute(predictions=predictions, references=labels)["accuracy"]
-   f1 = load_f1.compute(predictions=predictions, references=labels)["f1"]
+   f1 = load_f1.compute(predictions=predictions, references=labels, average="weighted")["f1"]
    return {"accuracy": accuracy, "f1": f1}
 
 def train_model():
