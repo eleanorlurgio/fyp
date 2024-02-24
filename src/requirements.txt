@@ -6,3 +6,4 @@ pip install torch
 pip install datasets
 pip install transformers[torch]
 pip install scikit-learn
+pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118

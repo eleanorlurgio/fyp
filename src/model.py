@@ -19,145 +19,134 @@ from torch import cuda
 from transformers import DataCollatorWithPadding
 from transformers import TrainingArguments, Trainer
 
-def get_model():
+# defines evaluation metrics
+def compute_metrics(eval_pred):
+   load_accuracy = load_metric("accuracy")
+   load_f1 = load_metric("f1")
+  
+   logits, labels = eval_pred
 
-    # Set up GPU
+   predictions = np.argmax(logits, axis=-1)
+   accuracy = load_accuracy.compute(predictions=predictions, references=labels)["accuracy"]
+   f1 = load_f1.compute(predictions=predictions, references=labels)["f1"]
+   return {"accuracy": accuracy, "f1": f1}
+
+def train_model():
+    #
+    dataset = load_dataset("SetFit/sst5", "default")
+
+    print(cuda.is_available())
 
     device = 'cuda' if cuda.is_available() else 'cpu'
 
     # load model and tokenizer
     roberta = "roberta-base"
 
-    model = AutoModelForSequenceClassification.from_pretrained(roberta)
+    model = AutoModelForSequenceClassification.from_pretrained(roberta, num_labels=5)
     tokenizer = AutoTokenizer.from_pretrained(roberta)
-    labels = ['Negative', 'Neutral', 'Positive']
 
-    return model, tokenizer, labels
+    model.to(device)
 
-def scaled_dot_product(q, k, v, mask=None):
+    train_dataset = dataset["train"]
+    test_dataset = dataset["test"]
 
-    score_matrix = q@k.mT
-    scaled_score_matrix = score_matrix / math.sqrt(q.shape[-1])
-    attention_weight = torch.nn.functional.softmax(scaled_score_matrix)
-    output = attention_weight@v
 
-    return output, attention_weight
+    def preprocess_function(examples):
+        return tokenizer(examples["text"], truncation=True)
 
-class SelfAttention(nn.Module):
-    def __init__(self, k, heads=4, mask=False):
-      
-        super().__init__()
-        
-        assert k % heads == 0
-        
-        self.k, self.heads = k, heads
 
-        # These compute the queries, keys and values for all
-        # heads
-        self.tokeys    = nn.Linear(k, k, bias=False)
-        self.toqueries = nn.Linear(k, k, bias=False)
-        self.tovalues  = nn.Linear(k, k, bias=False)
+    tokenized_train = train_dataset.map(preprocess_function, batched=True)
+    tokenized_test = test_dataset.map(preprocess_function, batched=True)
 
-        # This will be applied after the multi-head self-attention operation.
-        self.unifyheads = nn.Linear(k, k)
+    data_collator = DataCollatorWithPadding(tokenizer=tokenizer)
 
-    def forward(self, x):
+    # print(TrainingArguments.size(), labels.size())
 
-        b, t, k = x.size()
-        h = self.heads
-
-        queries = self.toqueries(x)
-        keys    = self.tokeys(x)   
-        values  = self.tovalues(x)
-
-        s = k // h
-
-        keys    = keys.view(b, t, h, s)
-        queries = queries.view(b, t, h, s)
-        values  = values.view(b, t, h, s)
-
-        # - fold heads into the batch dimension
-        keys = keys.transpose(1, 2).contiguous().view(b * h, t, s)
-        queries = queries.transpose(1, 2).contiguous().view(b * h, t, s)
-        values = values.transpose(1, 2).contiguous().view(b * h, t, s)
-
-            # Get dot product of queries and keys, and scale
-        dot = torch.bmm(queries, keys.transpose(1, 2))
-        # -- dot has size (b*h, t, t) containing raw weights
-
-        # scale the dot product
-        dot = dot / (k ** (1/2))
-        
-        # normalize 
-        dot = F.softmax(dot, dim=2)
-        # - dot now contains row-wise normalized weights
-
-        # apply the self attention to the values
-        out = torch.bmm(dot, values).view(b, h, t, s)
-
-        # swap h, t back, unify heads
-        out = out.transpose(1, 2).contiguous().view(b, t, s * h)
-        
-        return self.unifyheads(out)
+    repo_name = "results"
+ 
+    training_args = TrainingArguments(
+    output_dir= repo_name,
+    learning_rate=2e-5,
+    per_device_train_batch_size=16,
+    per_device_eval_batch_size=16,
+    num_train_epochs=1,
+    weight_decay=0.01,
+    save_strategy="epoch",
+    push_to_hub=True,
+    )
     
-class TransformerBlock(nn.Module):
-  def __init__(self, k, heads):
-    super().__init__()
+    trainer = Trainer(
+    model=model,
+    args=training_args,
+    train_dataset=tokenized_train,
+    eval_dataset=tokenized_test,
+    tokenizer=tokenizer,
+    data_collator=data_collator,
+    compute_metrics=compute_metrics,
+    )
 
-    self.attention = SelfAttention(k, heads=heads)
+    # target = torch.unsqueeze(target)
 
-    self.norm1 = nn.LayerNorm(k)
-    self.norm2 = nn.LayerNorm(k)
+    trainer.train()
 
-    self.ff = nn.Sequential(
-      nn.Linear(k, 4 * k),
-      nn.ReLU(),
-      nn.Linear(4 * k, k))
+    trainer.save_model("saved_model")
 
-  def forward(self, x):
-    attended = self.attention(x)
-    x = self.norm1(attended + x)
+    trainer.evaluate()
+    
 
-    fedforward = self.ff(x)
-    return self.norm2(fedforward + x)
-  
-class Transformer(nn.Module):
-    def __init__(self, k, heads, depth, seq_length, num_tokens, num_classes):
-        super().__init__()
+def load_model():
 
-        self.num_tokens = num_tokens
-        self.token_emb = nn.Embedding(num_tokens, k)
-        self.pos_emb = nn.Embedding(seq_length, k)
+    #
+    dataset = load_dataset("SetFit/sst5", "default")
 
-		# The sequence of transformer blocks that does all the
-		# heavy lifting
-        tblocks = []
-        for i in range(depth):
-            tblocks.append(TransformerBlock(k=k, heads=heads))
-        self.tblocks = nn.Sequential(*tblocks)
+    print(cuda.is_available())
 
-		# Maps the final output sequence to class logits
-        self.toprobs = nn.Linear(k, num_classes)
+    device = 'cuda' if cuda.is_available() else 'cpu'
 
-    def forward(self, x):
-        """
-        :param x: A (b, t) tensor of integer values representing
-                  words (in some predetermined vocabulary).
-        :return: A (b, c) tensor of log-probabilities over the
-                 classes (where c is the nr. of classes).
-        """
-		# generate token embeddings
-        tokens = self.token_emb(x)
-        b, t, k = tokens.size()
+    # load model and tokenizer
+    roberta = "roberta-base"
 
-		# generate position embeddings
-        positions = torch.arange(t)
-        positions = self.pos_emb(positions)[None, :, :].expand(b, t, k)
+    model = AutoModelForSequenceClassification.from_pretrained('saved_model')
+    tokenizer = AutoTokenizer.from_pretrained(roberta)
 
-        x = tokens + positions
-        x = self.tblocks(x)
+    model.to(device)
 
-        # Average-pool over the t dimension and project to class
-        # probabilities
-        x = self.toprobs(x.mean(dim=1))
-        return F.log_softmax(x, dim=1)
+    train_dataset = dataset["train"]
+    test_dataset = dataset["test"]
+
+
+    def preprocess_function(examples):
+        return tokenizer(examples["text"], truncation=True)
+
+
+    tokenized_train = train_dataset.map(preprocess_function, batched=True)
+    tokenized_test = test_dataset.map(preprocess_function, batched=True)
+
+    data_collator = DataCollatorWithPadding(tokenizer=tokenizer)
+    repo_name = "results"
+ 
+    training_args = TrainingArguments(
+    output_dir= repo_name,
+    learning_rate=2e-5,
+    per_device_train_batch_size=16,
+    per_device_eval_batch_size=16,
+    num_train_epochs=1,
+    weight_decay=0.01,
+    save_strategy="epoch",
+    push_to_hub=True,
+    )
+    
+    trainer = Trainer(
+    model=model,
+    args=training_args,
+    train_dataset=tokenized_train,
+    eval_dataset=tokenized_test,
+    tokenizer=tokenizer,
+    data_collator=data_collator,
+    compute_metrics=compute_metrics,
+    )
+
+    trainer.evaluate()
+
+def main():
+    load_model()
