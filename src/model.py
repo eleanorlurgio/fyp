@@ -33,19 +33,24 @@ def compute_metrics(eval_pred):
    print("\n" + "Accuracy:" + str(accuracy) + ", F1:" + str(f1))
    return {"accuracy": accuracy, "f1": f1}
 
-def train_model():
-    #
-    dataset = load_dataset("SetFit/sst5", "default")
+def get_model(type):
+    if type == "train":
+        model = AutoModelForSequenceClassification.from_pretrained("roberta-base", num_labels=5)
+    elif type == "load":
+        model = AutoModelForSequenceClassification.from_pretrained('saved_model')
 
-    print(cuda.is_available())
+    tokenizer = AutoTokenizer.from_pretrained("roberta-base")
+    labels = ['Negative', 'Slightly Negative', 'Neutral', 'Slightly Positive', 'Positive']
+
+    return model, tokenizer, labels
+
+def create_model(type):
+    
+    dataset = load_dataset("SetFit/sst5", "default")
 
     device = 'cuda' if cuda.is_available() else 'cpu'
 
-    # load model and tokenizer
-    roberta = "roberta-base"
-
-    model = AutoModelForSequenceClassification.from_pretrained(roberta, num_labels=5)
-    tokenizer = AutoTokenizer.from_pretrained(roberta)
+    model, tokenizer, _ = get_model(type)
 
     model.to(device)
 
@@ -61,9 +66,6 @@ def train_model():
     tokenized_test = test_dataset.map(preprocess_function, batched=True)
 
     data_collator = DataCollatorWithPadding(tokenizer=tokenizer)
-
-    # print(TrainingArguments.size(), labels.size())
-
     repo_name = "results"
  
     training_args = TrainingArguments(
@@ -71,9 +73,10 @@ def train_model():
     learning_rate=2e-5,
     per_device_train_batch_size=16,
     per_device_eval_batch_size=16,
-    num_train_epochs=1,
+    num_train_epochs=60,
     weight_decay=0.01,
-    save_strategy="epoch",
+    save_total_limit = 2,
+    save_strategy = "no",
     push_to_hub=True,
     )
     
@@ -87,7 +90,10 @@ def train_model():
     compute_metrics=compute_metrics,
     )
 
-    # target = torch.unsqueeze(target)
+    return trainer
+
+def train_model():
+    trainer = create_model("train")
 
     trainer.train()
 
@@ -97,58 +103,9 @@ def train_model():
     
 
 def load_model():
-
-    #
-    dataset = load_dataset("SetFit/sst5", "default")
-
-    print(cuda.is_available())
-
-    device = 'cuda' if cuda.is_available() else 'cpu'
-
-    # load model and tokenizer
-    roberta = "roberta-base"
-
-    model = AutoModelForSequenceClassification.from_pretrained('saved_model')
-    tokenizer = AutoTokenizer.from_pretrained(roberta)
-
-    model.to(device)
-
-    train_dataset = dataset["train"]
-    test_dataset = dataset["test"]
-
-
-    def preprocess_function(examples):
-        return tokenizer(examples["text"], truncation=True)
-
-
-    tokenized_train = train_dataset.map(preprocess_function, batched=True)
-    tokenized_test = test_dataset.map(preprocess_function, batched=True)
-
-    data_collator = DataCollatorWithPadding(tokenizer=tokenizer)
-    repo_name = "results"
- 
-    training_args = TrainingArguments(
-    output_dir= repo_name,
-    learning_rate=2e-5,
-    per_device_train_batch_size=16,
-    per_device_eval_batch_size=16,
-    num_train_epochs=1,
-    weight_decay=0.01,
-    save_strategy="epoch",
-    push_to_hub=True,
-    )
-    
-    trainer = Trainer(
-    model=model,
-    args=training_args,
-    train_dataset=tokenized_train,
-    eval_dataset=tokenized_test,
-    tokenizer=tokenizer,
-    data_collator=data_collator,
-    compute_metrics=compute_metrics,
-    )
+    trainer = create_model("load")
 
     trainer.evaluate()
 
 def main():
-    load_model()
+    train_model()
