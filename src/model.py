@@ -73,7 +73,7 @@ def create_model(type):
     learning_rate=2e-5,
     per_device_train_batch_size=16,
     per_device_eval_batch_size=16,
-    num_train_epochs=60,
+    num_train_epochs=1,
     weight_decay=0.01,
     save_total_limit = 2,
     save_strategy = "no",
@@ -108,4 +108,4 @@ def load_model():
     trainer.evaluate()
 
 def main():
-    train_model()
+    load_model()

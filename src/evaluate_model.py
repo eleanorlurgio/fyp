@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 from scipy.special import softmax
+from matplotlib import pyplot as plt
 import model
 import example_model
 
@@ -19,15 +20,20 @@ def Average(list):
 # evaluates the average sentiment score for all male or all female sentences    
 def gender():
     eec = import_eec()
-    my_model = model.get_model()[0]
-    tokenizer = model.get_model()[1]
-    labels = model.get_model()[2]
+    my_model = model.get_model("load")[0]
+    tokenizer = model.get_model("load")[1]
+    labels = model.get_model("load")[2]
 
     male_positive = []
+    male_slightly_positive = []
     male_neutral = []
+    male_slightly_negative = []
     male_negative = []
+
     female_positive = []
+    female_slightly_positive = []
     female_neutral = []
+    female_slightly_negative = []
     female_negative = []
 
     for i in range(0, eec[:,0].size):
@@ -51,36 +57,72 @@ def gender():
                 male_positive.append(s)
             elif (l == "Positive") and (gender == "female"):
                 female_positive.append(s)
+            elif (l == "Slightly Positive") and (gender == "male"):
+                male_slightly_positive.append(s)
+            elif (l == "Slightly Positive") and (gender == "female"):
+                female_slightly_positive.append(s)
             elif (l == "Neutral") and (gender == "male"):
                 male_neutral.append(s)
             elif (l == "Neutral") and (gender == "female"):
                 female_neutral.append(s)
+            elif (l == "Slightly Negative") and (gender == "male"):
+                male_slightly_negative.append(s)
+            elif (l == "Slightly Negative") and (gender == "female"):
+                female_slightly_negative.append(s)
             elif (l == "Negative") and (gender == "male"):
                 male_negative.append(s)
             elif (l == "Negative") and (gender == "female"):
                 female_negative.append(s)
 
+    # print results in terminal
     print("Average male positive: " + str(Average(male_positive)))
     print("Average female positive: " + str(Average(female_positive)))
+    print("------------------------------------------------------------------------")
+    print("Average male slightly positive: " + str(Average(male_slightly_positive)))
+    print("Average female slightly positive: " + str(Average(female_slightly_positive)))
+    print("------------------------------------------------------------------------")
     print("Average male neutral: " + str(Average(male_neutral)))
     print("Average female neutral: " + str(Average(female_neutral)))
+    print("------------------------------------------------------------------------")
+    print("Average male slightly negative: " + str(Average(male_slightly_negative)))
+    print("Average female slightly negative: " + str(Average(female_slightly_negative)))
+    print("------------------------------------------------------------------------")
     print("Average male negative: " + str(Average(male_negative)))
     print("Average female negative: " + str(Average(female_negative)))
+
+    # plot results
+    x = ['Negative', 'Slightly Negative', 'Neutral', 'Slightly Positive', 'Positive']
+    y = [Average(male_negative), Average(male_slightly_negative), Average(male_neutral), Average(male_slightly_positive), Average(male_positive)]
+    y_2 = [Average(female_negative), Average(female_slightly_negative), Average(female_neutral), Average(female_slightly_positive), Average(female_positive)]
+
+    plt.plot(x, y, "bo", label="male")
+    plt.plot(x, y_2, "ro", label="female")
+    plt.legend(loc="upper left")
+    plt.title("Average Sentiment Score per Gender")
+    plt.xlabel("Sentiment rating")
+    plt.ylabel("Proportion of sentences per rating")
+    plt.savefig('graphs/average_by_gender.png')
+
 
 # evaluates the average sentiment score for male or female sentences for a given emotion e.g. anger, sadness etc.  
 def gender_emotion():
     eec = import_eec()
-    my_model = model.get_model()[0]
-    tokenizer = model.get_model()[1]
-    labels = model.get_model()[2]
+    my_model = model.get_model("load")[0]
+    tokenizer = model.get_model("load")[1]
+    labels = model.get_model("load")[2]
 
     for emotion_to_check in set(eec[:,5]):
 
         male_positive = []
+        male_slightly_positive = []
         male_neutral = []
+        male_slightly_negative = []
         male_negative = []
+
         female_positive = []
+        female_slightly_positive = []
         female_neutral = []
+        female_slightly_negative = []
         female_negative = []
 
         for i in range(0, eec[:,0].size):
@@ -106,10 +148,18 @@ def gender_emotion():
                         male_positive.append(s)
                     elif (l == "Positive") and (gender == "female"):
                         female_positive.append(s)
+                    elif (l == "Slightly Positive") and (gender == "male"):
+                        male_slightly_positive.append(s)
+                    elif (l == "Slightly Positive") and (gender == "female"):
+                        female_slightly_positive.append(s)
                     elif (l == "Neutral") and (gender == "male"):
                         male_neutral.append(s)
                     elif (l == "Neutral") and (gender == "female"):
                         female_neutral.append(s)
+                    elif (l == "Slightly Negative") and (gender == "male"):
+                        male_slightly_negative.append(s)
+                    elif (l == "Slightly Negative") and (gender == "female"):
+                        female_slightly_negative.append(s)
                     elif (l == "Negative") and (gender == "male"):
                         male_negative.append(s)
                     elif (l == "Negative") and (gender == "female"):
@@ -118,17 +168,35 @@ def gender_emotion():
         print("------------------------------------------------------------------------")
         print("Average male positive for " + str(emotion_to_check) + ": " + str(Average(male_positive)))
         print("Average female positive for " + str(emotion_to_check) + ": " + str(Average(female_positive)))
+        print("Average male slightly positive for " + str(emotion_to_check) + ": " + str(Average(male_slightly_positive)))
+        print("Average female slightly positive for " + str(emotion_to_check) + ": " + str(Average(female_slightly_positive)))
         print("Average male neutral for " + str(emotion_to_check) + ": " + str(Average(male_neutral)))
         print("Average female neutral for " + str(emotion_to_check) + ": " + str(Average(female_neutral)))
+        print("Average male slightly negative for " + str(emotion_to_check) + ": " + str(Average(male_slightly_negative)))
+        print("Average female slightly negative for " + str(emotion_to_check) + ": " + str(Average(female_slightly_negative)))
         print("Average male negative for " + str(emotion_to_check) + ": " + str(Average(male_negative)))
         print("Average female negative for " + str(emotion_to_check) + ": " + str(Average(female_negative)))
+
+        # plot results
+        x = ['Negative', 'Slightly Negative', 'Neutral', 'Slightly Positive', 'Positive']
+        y = [Average(male_negative), Average(male_slightly_negative), Average(male_neutral), Average(male_slightly_positive), Average(male_positive)]
+        y_2 = [Average(female_negative), Average(female_slightly_negative), Average(female_neutral), Average(female_slightly_positive), Average(female_positive)]
+
+        plt.plot(x, y, "bo", label="male")
+        plt.plot(x, y_2, "ro", label="female")
+        plt.legend(loc="upper left")
+        plt.title("Average sentiment score per gender for " + str(emotion_to_check))
+        plt.xlabel("Sentiment rating")
+        plt.ylabel("Proportion of sentences per rating")
+        plt.savefig('graphs/{}'.format(emotion_to_check))
+        plt.clf()
 
 # evaluates the average sentiment score for male or female sentences for a given emotion e.g. anger, sadness etc.  
 def gender_evaluate():
     eec = import_eec()
-    my_model = model.get_model()[0]
-    tokenizer = model.get_model()[1]
-    labels = model.get_model()[2]
+    my_model = model.get_model("load")[0]
+    tokenizer = model.get_model("load")[1]
+    labels = model.get_model("load")[2]
 
     male = []
     female = []
