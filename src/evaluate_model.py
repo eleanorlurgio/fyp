@@ -20,9 +20,9 @@ def Average(list):
 # evaluates the average sentiment score for all male or all female sentences    
 def gender():
     eec = import_eec()
-    my_model = roberta_model.get_model("load")[0]
-    tokenizer = roberta_model.get_model("load")[1]
-    labels = roberta_model.get_model("load")[2]
+    my_model = roberta_model.get_saved_model()[0]
+    tokenizer = roberta_model.get_saved_model()[1]
+    labels = roberta_model.get_saved_model()[2]
 
     male_positive = []
     male_slightly_positive = []
@@ -107,9 +107,9 @@ def gender():
 # evaluates the average sentiment score for male or female sentences for a given emotion e.g. anger, sadness etc.  
 def gender_emotion():
     eec = import_eec()
-    my_model = roberta_model.get_model("load")[0]
-    tokenizer = roberta_model.get_model("load")[1]
-    labels = roberta_model.get_model("load")[2]
+    my_model = roberta_model.get_saved_model()[0]
+    tokenizer = roberta_model.get_saved_model()[1]
+    labels = roberta_model.get_saved_model()[2]
 
     for emotion_to_check in set(eec[:,5]):
 
@@ -194,9 +194,9 @@ def gender_emotion():
 # evaluates the average sentiment score for male or female sentences for a given emotion e.g. anger, sadness etc.  
 def gender_evaluate():
     eec = import_eec()
-    my_model = roberta_model.get_model("load")[0]
-    tokenizer = roberta_model.get_model("load")[1]
-    labels = roberta_model.get_model("load")[2]
+    my_model = roberta_model.get_saved_model()[0]
+    tokenizer = roberta_model.get_saved_model()[1]
+    labels = roberta_model.get_saved_model()[2]
 
     male = []
     female = []

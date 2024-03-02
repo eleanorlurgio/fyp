@@ -30,36 +30,30 @@ def compute_metrics(eval_pred):
     logits, labels = eval_pred
     predictions = np.argmax(logits, axis=-1)
 
-    precision = metric1.compute(predictions=predictions, references=labels, average="weighted")["precision"]
-    recall = metric2.compute(predictions=predictions, references=labels, average="weighted")["recall"]
-    f1 = metric3.compute(predictions=predictions, references=labels, average="weighted")["f1"]
+    precision = metric1.compute(predictions=predictions, references=labels, average="binary")["precision"]
+    recall = metric2.compute(predictions=predictions, references=labels, average="binary")["recall"]
+    f1 = metric3.compute(predictions=predictions, references=labels, average="binary")["f1"]
     accuracy = metric4.compute(predictions=predictions, references=labels)["accuracy"]
 
+    print("precision: " + str(precision) + "recall: " + str(recall) + "f1: " + str(f1) + "accuracy: " + str(accuracy))
     return {"precision": precision, "recall": recall, "f1": f1, "accuracy": accuracy}
 
-def get_base_model():
-
-    model = AutoModelForSequenceClassification.from_pretrained("roberta-base", num_labels=5)
+def get_model():
+    # if type == "train":
+    model = AutoModelForSequenceClassification.from_pretrained("roberta-base", num_labels=2)
+    # elif type == "load":
+    #     model = AutoModelForSequenceClassification.from_pretrained('saved_model')
 
     tokenizer = AutoTokenizer.from_pretrained("roberta-base")
-    labels = ['very negative', 'negative', 'neutral', 'positive', 'very positive']
+    labels = ['negative', 'positive']
 
     return model, tokenizer, labels
 
-def get_saved_model():
-
-    model = AutoModelForSequenceClassification.from_pretrained('saved_model')
-
-    tokenizer = AutoTokenizer.from_pretrained("roberta-base")
-    labels = ['very negative', 'negative', 'neutral', 'positive', 'very positive']
-
-    return model, tokenizer, labels
-
-def train_model():
+def create_model():
     
-    dataset = load_dataset("SetFit/sst5", "default")
+    dataset = load_dataset("sst2", "default")
 
-    model, tokenizer, _ = get_base_model()
+    model, tokenizer, _ = get_model()
 
     device = 'cuda' if cuda.is_available() else 'cpu'
 
@@ -71,7 +65,7 @@ def train_model():
 
 
     def preprocess_function(examples):
-        return tokenizer(examples["text"], truncation=True)
+        return tokenizer(examples["sentence"], truncation=True)
 
 
     tokenized_train = train_dataset.map(preprocess_function, batched=True)
@@ -106,6 +100,8 @@ def train_model():
     predictions = trainer.predict(tokenized_validation)
     preds = np.argmax(predictions.predictions, axis=-1)
 
+    # metric = evaluate.load("glue", "mrpc")
+    # metric.compute(predictions=preds, references=predictions.label_ids)
     trainer.train()
     # evaluate on validation set with labelled data
     trainer.evaluate()
@@ -115,6 +111,23 @@ def train_model():
 
     return trainer
 
+# def train_model():
+#     trainer = create_model("train")
+
+#     trainer.train()
+
+
+
+#     trainer.evaluate()
+
+#     trainer.save_model("saved_model")
+    
+
+# def load_model():
+#     trainer = create_model("load")
+
+#     trainer.evaluate()
 
 def main():
-    train_model()
+    CUDA_LAUNCH_BLOCKING="1"
+    create_model()
