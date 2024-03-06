@@ -86,7 +86,7 @@ def train_model():
     learning_rate=2e-5,
     per_device_train_batch_size=32,
     per_device_eval_batch_size=32,
-    num_train_epochs=30,
+    num_train_epochs=8,
     weight_decay=0.01,
     save_total_limit = 2,
     evaluation_strategy = "epoch",
@@ -109,12 +109,15 @@ def train_model():
     trainer.train()
     # evaluate on validation set with labelled data
     trainer.evaluate()
-    # predict on new unlabelled data
-    trainer.predict()
+
     trainer.save_model("saved_model")
 
     return trainer
 
 
 def main():
-    train_model()
+    # train_model()
+    get_saved_model()
+
+    dataset = load_dataset("SetFit/sst5", "default")
+    print(dataset)
