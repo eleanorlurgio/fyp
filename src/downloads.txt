@@ -10,3 +10,6 @@ pip3 install torch torchvision torchaudio --index-url https://download.pytorch.o
 pip install evaluate
 pip install matplotlib
 pip install plotly
+pip install torchtext
+pip install portalocker
+pip install jupyterlab
