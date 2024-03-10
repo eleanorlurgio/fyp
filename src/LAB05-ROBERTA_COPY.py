@@ -246,38 +246,27 @@ best_valid_loss = float("inf")
 
 metrics = collections.defaultdict(list)
 
-for epoch in range(n_epochs):
-    train_loss, train_acc = train(
-        train_data_loader, model, criterion, optimizer, device
-    )
-    valid_loss, valid_acc = evaluate(valid_data_loader, model, criterion, device)
-    metrics["train_losses"].append(train_loss)
-    metrics["train_accs"].append(train_acc)
-    metrics["valid_losses"].append(valid_loss)
-    metrics["valid_accs"].append(valid_acc)
-    if valid_loss < best_valid_loss:
-        best_valid_loss = valid_loss
-        torch.save(model.state_dict(), "transformer.pt")
-    print(f"epoch: {epoch}")
-    print(f"train_loss: {train_loss:.3f}, train_acc: {train_acc:.3f}")
-    print(f"valid_loss: {valid_loss:.3f}, valid_acc: {valid_acc:.3f}")
+# for epoch in range(n_epochs):
+#     train_loss, train_acc = train(
+#         train_data_loader, model, criterion, optimizer, device
+#     )
+#     valid_loss, valid_acc = evaluate(valid_data_loader, model, criterion, device)
+#     metrics["train_losses"].append(train_loss)
+#     metrics["train_accs"].append(train_acc)
+#     metrics["valid_losses"].append(valid_loss)
+#     metrics["valid_accs"].append(valid_acc)
+#     if valid_loss < best_valid_loss:
+#         best_valid_loss = valid_loss
+#         torch.save(model.state_dict(), "transformer.pt")
+#     print(f"epoch: {epoch}")
+#     print(f"train_loss: {train_loss:.3f}, train_acc: {train_acc:.3f}")
+#     print(f"valid_loss: {valid_loss:.3f}, valid_acc: {valid_acc:.3f}")
 
 
-fig = plt.figure(figsize=(10, 6))
-ax = fig.add_subplot(1, 1, 1)
-ax.plot(metrics["train_accs"], label="train accuracy")
-ax.plot(metrics["valid_accs"], label="valid accuracy")
-ax.set_xlabel("epoch")
-ax.set_ylabel("loss")
-ax.set_xticks(range(n_epochs))
-ax.legend()
-ax.grid()
 
-plt.savefig('train_progress.png')
 
 
 model.load_state_dict(torch.load("transformer.pt"))
-
 
 test_loss, test_acc = evaluate(test_data_loader, model, criterion, device)
 
@@ -298,12 +287,12 @@ def predict_sentiment(text, model, tokenizer, device):
 
 text = "This film is terrible!"
 
-predict_sentiment(text, model, tokenizer, device)
+print(predict_sentiment(text, model, tokenizer, device))
 
 text = "This film is great!"
 
-predict_sentiment(text, model, tokenizer, device)
+print(predict_sentiment(text, model, tokenizer, device))
 
 text = "This film is not terrible, it's great!"
 
-predict_sentiment(text, model, tokenizer, device)
+print(predict_sentiment(text, model, tokenizer, device))

@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 from scipy.special import softmax
 from matplotlib import pyplot as plt
-import roberta_model
+import roberta_sst5
 import example_model
 
 def import_eec():
