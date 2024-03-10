@@ -1,11 +1,7 @@
 import torch
 import torchtext
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
-
-
 import collections
-
-import datasets
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
@@ -14,6 +10,7 @@ import torch.optim as optim
 import torchtext
 import tqdm
 import transformers
+from datasets import load_dataset
 
 # Set a fixed value for the random seed to ensure reproducible results
 SEED = 1234
@@ -31,54 +28,9 @@ print("PyTorch Version: ", torch.__version__)
 print("torchtext Version: ", torchtext.__version__)
 print(f"Using {'GPU' if str(DEVICE) == 'cuda' else 'CPU'}.")
 
-
-
 tokenizer = AutoTokenizer.from_pretrained("roberta-base")
 
 max_input_length = tokenizer.max_model_input_sizes['roberta-base']
-
-from torchtext.vocab import vocab
-from torchtext.data.utils import get_tokenizer
-
-# # Define a class TransformerTokenizer that inherits from torch.nn.Module
-# class TransformerTokenizer(torch.nn.Module):
-#     # The constructor takes a tokenizer object as input
-#     def __init__(self, tokenizer):
-#         super().__init__()  # Initialize the superclass (torch.nn.Module)
-#         self.tokenizer = tokenizer  # Store the tokenizer object for later use
-    
-#     # Define the forward method, which will be called to tokenize input text
-#     def forward(self, input):
-#         # If the input is a list (presumably of strings), iterate over the list
-#         if isinstance(input, list):
-#             tokens = [] 
-#             for text in input:  # Iterate over each string in the input list
-#                 # Tokenize the current string and append the list of tokens to the tokens list
-#                 tokens.append(self.tokenizer.tokenize(text))
-#             return tokens  # Return the list of lists of tokens
-#         # If the input is a single string
-#         elif isinstance(input, str):
-#             return self.tokenizer.tokenize(input)
-#         raise ValueError(f"Type {type(input)} is not supported.")
-        
-# # Create a vocabulary object from the tokenizer's vocabulary, setting minimum frequency to 0
-# # This includes all tokens in the tokenizer's vocabulary in the vocab object
-# tokenizer_vocab = vocab(tokenizer.vocab, min_freq=0)
-
-import torchtext.transforms as T
-
-# text_transform = T.Sequential(
-#     TransformerTokenizer(tokenizer),  # Tokenize
-#     T.VocabTransform(tokenizer_vocab),  # Conver to vocab IDs
-#     T.Truncate(max_input_length - 2),  # Cut to max length to add BOS and EOS token
-#     T.AddToken(token=tokenizer_vocab["<s>"], begin=True),  # BOS token
-#     T.AddToken(token=tokenizer_vocab["</s>"], begin=False),  # EOS token
-#     T.ToTensor(padding_value=tokenizer_vocab["<pad>"]),  # Convert to tensor and pad
-# )
-
-from torchtext.datasets import IMDB
-from torchtext.data.functional import to_map_style_dataset
-from datasets import load_dataset
 
 # using the split version of the dataset
 dataset = load_dataset("dair-ai/emotion", "split")
@@ -105,8 +57,6 @@ train_data = train_data.map(
 test_data = test_data.map(
     tokenize_and_numericalize_example, fn_kwargs={"tokenizer": tokenizer}
 )
-
-print(train_data[0])
 
 pad_index = tokenizer.pad_token_id
 
@@ -192,8 +142,6 @@ print(f"The model has {count_parameters(model):,} trainable parameters")
 
 optimizer = optim.Adam(model.parameters(), lr=1e-5)
 
-
-
 criterion = nn.CrossEntropyLoss()
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -241,69 +189,72 @@ def evaluate(data_loader, model, criterion, device):
     return np.mean(epoch_losses), np.mean(epoch_accs)
 
 
-n_epochs = 10
-best_valid_loss = float("inf")
+def train_model():
+    n_epochs = 10
+    best_valid_loss = float("inf")
 
-metrics = collections.defaultdict(list)
+    metrics = collections.defaultdict(list)
 
-for epoch in range(n_epochs):
-    train_loss, train_acc = train(
-        train_data_loader, model, criterion, optimizer, device
-    )
-    valid_loss, valid_acc = evaluate(valid_data_loader, model, criterion, device)
-    metrics["train_losses"].append(train_loss)
-    metrics["train_accs"].append(train_acc)
-    metrics["valid_losses"].append(valid_loss)
-    metrics["valid_accs"].append(valid_acc)
-    if valid_loss < best_valid_loss:
-        best_valid_loss = valid_loss
-        torch.save(model.state_dict(), "transformer.pt")
-    print(f"epoch: {epoch}")
-    print(f"train_loss: {train_loss:.3f}, train_acc: {train_acc:.3f}")
-    print(f"valid_loss: {valid_loss:.3f}, valid_acc: {valid_acc:.3f}")
-
-
-fig = plt.figure(figsize=(10, 6))
-ax = fig.add_subplot(1, 1, 1)
-ax.plot(metrics["train_accs"], label="train accuracy")
-ax.plot(metrics["valid_accs"], label="valid accuracy")
-ax.set_xlabel("epoch")
-ax.set_ylabel("loss")
-ax.set_xticks(range(n_epochs))
-ax.legend()
-ax.grid()
-
-plt.savefig('train_progress.png')
+    for epoch in range(n_epochs):
+        train_loss, train_acc = train(
+            train_data_loader, model, criterion, optimizer, device
+        )
+        valid_loss, valid_acc = evaluate(valid_data_loader, model, criterion, device)
+        metrics["train_losses"].append(train_loss)
+        metrics["train_accs"].append(train_acc)
+        metrics["valid_losses"].append(valid_loss)
+        metrics["valid_accs"].append(valid_acc)
+        if valid_loss < best_valid_loss:
+            best_valid_loss = valid_loss
+            torch.save(model.state_dict(), "transformer.pt")
+        print(f"epoch: {epoch}")
+        print(f"train_loss: {train_loss:.3f}, train_acc: {train_acc:.3f}")
+        print(f"valid_loss: {valid_loss:.3f}, valid_acc: {valid_acc:.3f}")
 
 
-model.load_state_dict(torch.load("transformer.pt"))
+    fig = plt.figure(figsize=(10, 6))
+    ax = fig.add_subplot(1, 1, 1)
+    ax.plot(metrics["train_accs"], label="train accuracy")
+    ax.plot(metrics["valid_accs"], label="valid accuracy")
+    ax.set_xlabel("epoch")
+    ax.set_ylabel("loss")
+    ax.set_xticks(range(n_epochs))
+    ax.legend()
+    ax.grid()
+
+    plt.savefig('train_progress.png')
 
 
-test_loss, test_acc = evaluate(test_data_loader, model, criterion, device)
+def load_model():
+    model.load_state_dict(torch.load("transformer.pt"))
 
-print(f"test_loss: {test_loss:.3f}, test_acc: {test_acc:.3f}")
+    test_loss, test_acc = evaluate(test_data_loader, model, criterion, device)
+
+    print(f"test_loss: {test_loss:.3f}, test_acc: {test_acc:.3f}")
+
+    def predict_sentiment(text, model, tokenizer, device):
+        ids = tokenizer(text)["input_ids"]
+        tensor = torch.LongTensor(ids).unsqueeze(dim=0).to(device)
+        prediction = model(tensor).squeeze(dim=0)
+        probability = torch.softmax(prediction, dim=-1)
+        predicted_class = prediction.argmax(dim=-1).item()
+        predicted_probability = probability[predicted_class].item()
+        return predicted_class, predicted_probability
+
+    text = "We had a romantic time!"
+
+    print(predict_sentiment(text, model, tokenizer, device))
+
+    text = "This film is great!"
+
+    print(predict_sentiment(text, model, tokenizer, device))
+
+    text = "This film is not terrible, it's great!"
+
+    print(predict_sentiment(text, model, tokenizer, device))
 
 
+def main():
+    load_model()
 
-def predict_sentiment(text, model, tokenizer, device):
-    ids = tokenizer(text)["input_ids"]
-    tensor = torch.LongTensor(ids).unsqueeze(dim=0).to(device)
-    prediction = model(tensor).squeeze(dim=0)
-    probability = torch.softmax(prediction, dim=-1)
-    predicted_class = prediction.argmax(dim=-1).item()
-    predicted_probability = probability[predicted_class].item()
-    return predicted_class, predicted_probability
-
-
-
-text = "This film is terrible!"
-
-predict_sentiment(text, model, tokenizer, device)
-
-text = "This film is great!"
-
-predict_sentiment(text, model, tokenizer, device)
-
-text = "This film is not terrible, it's great!"
-
-predict_sentiment(text, model, tokenizer, device)
+main()
