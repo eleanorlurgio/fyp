@@ -160,25 +160,41 @@ def predict_sentiment(text, model, tokenizer, device):
     ids = tokenizer(text)["input_ids"]
     tensor = torch.LongTensor(ids).unsqueeze(dim=0).to(device)
     prediction = model(tensor).squeeze(dim=0)
+    print("prediction", prediction)
+    # probability distribution
     probability = torch.softmax(prediction, dim=-1)
+    print("probability", probability)
     predicted_class = prediction.argmax(dim=-1).item()
     predicted_probability = probability[predicted_class].item()
 
     # convert predicted_class to its text label
+    labels = ["sadness", "joy", "love", "anger", "fear", "surprise"]
+
     if predicted_class == 0:
-        predicted_class = "sadness"
+        predicted_class = labels[0]
     elif predicted_class == 1:
-        predicted_class = "joy"
+        predicted_class = labels[1]
     elif predicted_class == 2:
-        predicted_class = "love"
+        predicted_class = labels[2]
     elif predicted_class == 3:
-        predicted_class = "anger"
+        predicted_class = labels[3]
     elif predicted_class == 4:
-        predicted_class = "fear"
+        predicted_class = labels[4]
     elif predicted_class == 5:
-        predicted_class = "surprise"
+        predicted_class = labels[5]
+
+    plt.clf()
+
+    plt.figure(figsize=(4.5, 4))
+    plt.bar(labels, probability.cpu().detach().numpy(), color = "darkblue", edgecolor = "black", width = 1)
+    plt.title("Probability Distribution")
+    plt.xlabel("Sentiment")
+    plt.ylabel("Probability")
+
+    plt.savefig('probability_distribution.png')
 
     return predicted_class, predicted_probability
+
 
 def get_accuracy(prediction, label):
     batch_size, _ = prediction.shape
@@ -187,6 +203,9 @@ def get_accuracy(prediction, label):
     accuracy = correct_predictions / batch_size
     return accuracy
 
+# TODO: get_wasserstein distance between two probability distributions
+
+# TODO: adapt to find average wasserstein distances for each emotion
 def get_bias():
     df = pd.read_csv('src\datasets\Equity-Evaluation-Corpus.csv', usecols=["Sentence", "Template","Person","Gender","Race","Emotion","Emotion word"])
     eec = df.to_numpy()
@@ -346,25 +365,24 @@ def train_model():
 def load_model():
     model.load_state_dict(torch.load("transformer.pt"))
 
-    test_loss, test_acc = evaluate(test_data_loader, model, criterion, device)
+    # test_loss, test_acc, diff_0, diff_1, diff_2, diff_3, bias_score = evaluate(test_data_loader, model, criterion, device)
 
-    print(f"test_loss: {test_loss:.3f}, test_acc: {test_acc:.3f}")
+    # print(f"test_loss: {test_loss:.3f}, test_acc: {test_acc:.3f}")
 
-    text = "There is a dog"
+    # example
+    # text = "Did I enjoy the movie?"
+    # print(str(text) + "\n" + str(predict_sentiment(text, model, tokenizer, device)))
 
-    print(predict_sentiment(text, model, tokenizer, device))
+    # text = "He had a nice conversation with his mum"
+    # print(str(text) + "\n" + str(predict_sentiment(text, model, tokenizer, device)))
 
-    text = "She is great!"
+    # TODO WRITE ABOUT THIS
+    text = "I feel joy and sadness."
     print(str(text) + "\n" + str(predict_sentiment(text, model, tokenizer, device)))
 
-    text = "This film is not terrible, it's great!"
-
-    print(predict_sentiment(text, model, tokenizer, device))
-
-
 def main():
-    train_model()
-    # load_model()
+    # train_model()
+    load_model()
 
 main()
     
