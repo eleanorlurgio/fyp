@@ -4,6 +4,9 @@ from datasets import load_dataset
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import scipy
+from scipy.spatial import distance
+from scipy.stats import wasserstein_distance
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -159,15 +162,35 @@ def Average(list):
 def predict_sentiment(text, model, tokenizer, device):
     ids = tokenizer(text)["input_ids"]
     tensor = torch.LongTensor(ids).unsqueeze(dim=0).to(device)
+    # predictions
     prediction = model(tensor).squeeze(dim=0)
-    print("prediction", prediction)
-    # probability distribution
-    probability = torch.softmax(prediction, dim=-1)
-    print("probability", probability)
     predicted_class = prediction.argmax(dim=-1).item()
+
+    # reorder predictions
+    # prediction_ordered = []
+    # prediction_ordered.append(prediction[3])
+    # prediction_ordered.append(prediction[4])
+    # prediction_ordered.append(prediction[0])
+    # prediction_ordered.append(prediction[5])
+    # prediction_ordered.append(prediction[1])
+    # prediction_ordered.append(prediction[2])
+
+    # probabilities
+    probability = torch.softmax(prediction, dim=-1)
+
+    # reorder probabilities
+    # probability_distribution = []
+    # probability_distribution.append(probability[3])
+    # probability_distribution.append(probability[4])
+    # probability_distribution.append(probability[0])
+    # probability_distribution.append(probability[5])
+    # probability_distribution.append(probability[1])
+    # probability_distribution.append(probability[2])
+
     predicted_probability = probability[predicted_class].item()
 
     # convert predicted_class to its text label
+    # labels = ["anger","fear","sadness", "surprise", "joy", "love"]
     labels = ["sadness", "joy", "love", "anger", "fear", "surprise"]
 
     if predicted_class == 0:
@@ -193,8 +216,42 @@ def predict_sentiment(text, model, tokenizer, device):
 
     plt.savefig('probability_distribution.png')
 
-    return predicted_class, predicted_probability
+    return probability.cpu().detach().numpy(), predicted_class, predicted_probability
 
+def plot_distributions(distribution_1, distribution_2):
+    labels = ["sadness", "joy", "love", "anger", "fear", "surprise"]
+
+    plt.clf()
+
+    plt.figure(figsize=(4.5, 4))
+    plt.bar(labels, distribution_1, color = "darkblue", edgecolor = "black", width = 1)
+    plt.title("Probability Distribution")
+    plt.xlabel("Sentiment")
+    plt.ylabel("Probability")
+
+    plt.savefig('probability_distribution_1.png')
+
+    plt.clf()
+
+    plt.figure(figsize=(4.5, 4))
+    plt.bar(labels, distribution_2, color = "darkblue", edgecolor = "black", width = 1)
+    plt.title("Probability Distribution")
+    plt.xlabel("Sentiment")
+    plt.ylabel("Probability")
+
+    plt.savefig('probability_distribution_2.png')
+
+
+# TODO: get_wasserstein distance between two probability distributions
+def get_wasserstein(distribution_1, distribution_2):
+    wasserstein = wasserstein_distance(np.arange(6), np.arange(6), distribution_1, distribution_2)
+    print(wasserstein)
+    return wasserstein
+
+def get_jensenshannon(distribution_1, distribution_2):
+    jensenshannon = distance.jensenshannon(distribution_1, distribution_2)
+    print(jensenshannon)
+    return jensenshannon
 
 def get_accuracy(prediction, label):
     batch_size, _ = prediction.shape
@@ -203,7 +260,6 @@ def get_accuracy(prediction, label):
     accuracy = correct_predictions / batch_size
     return accuracy
 
-# TODO: get_wasserstein distance between two probability distributions
 
 # TODO: adapt to find average wasserstein distances for each emotion
 def get_bias():
@@ -227,7 +283,7 @@ def get_bias():
         sentence = eec[i,0]
         gender = eec[i,3]
 
-        predicted_class, predicted_probability = predict_sentiment(sentence, model, tokenizer, device)
+        probability_distribution, predicted_class, predicted_probability = predict_sentiment(sentence, model, tokenizer, device)
 
         if (predicted_class == "sadness") and (gender == "male"):
             male_0.append(predicted_probability)
@@ -377,8 +433,17 @@ def load_model():
     # print(str(text) + "\n" + str(predict_sentiment(text, model, tokenizer, device)))
 
     # TODO WRITE ABOUT THIS
-    text = "I feel joy and sadness."
-    print(str(text) + "\n" + str(predict_sentiment(text, model, tokenizer, device)))
+    text = "He feels joy."
+    distribution_1, _, _ = predict_sentiment(text, model, tokenizer, device)
+
+    text = "She feels joy."
+    distribution_2, _, _ = predict_sentiment(text, model, tokenizer, device)
+
+    plot_distributions(distribution_1, distribution_2)
+
+    get_wasserstein(distribution_1, distribution_2)
+
+    get_jensenshannon(distribution_1, distribution_2)
 
 def main():
     # train_model()
