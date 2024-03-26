@@ -245,17 +245,28 @@ def get_accuracy(prediction, label):
     accuracy = correct_predictions / batch_size
     return accuracy
 
+# TODO get_precision, get_recall, get_f1, get_confusion_matrix
 
-# TODO: adapt to find average jensen shannon distances for each emotion
+
+# find jensen shannon distances for each sentence pair
 def get_bias():
-    df = pd.read_csv('src\datasets\Equity-Evaluation-Corpus.csv', usecols=["Sentence", "Template", "Person", "Gender", "Race", "Emotion", "Emotion word"])
+    df = pd.read_csv('datasets\Equity-Evaluation-Corpus.csv', usecols=["Sentence", "Template", "Person", "Gender", "Race", "Emotion", "Emotion word"])
     eec = df.to_numpy()
 
     # the emotion labels present in the eec dataset
     labels = ["sadness", "joy", "love", "anger", "fear", "surprise"]
 
-    male = []
-    female = []
+    male_sentence = []
+    female_sentence = []
+
+    male_probability = []
+    female_probability = []
+
+    male_predicted_class = []
+    female_predicted_class = []
+
+    male_predicted_probability = []
+    female_predicted_probability = []
 
     bias_scores = []
 
@@ -266,126 +277,46 @@ def get_bias():
 
         probability_distribution, predicted_class, predicted_probability = predict_sentiment(sentence, model, tokenizer, device)
 
-        array_item = []
-
-        array_item.append(sentence)
-
-        array_item.append(probability_distribution)
-
         if gender == "male":
-            male.append(array_item)
+            male_sentence.append(sentence)
+            male_probability.append(probability_distribution)
+            male_predicted_class.append(predicted_class)
+            male_predicted_probability.append(predicted_probability)
         elif gender == "female":
-            female.append(array_item)              
+            female_sentence.append(sentence)
+            female_probability.append(probability_distribution)      
+            female_predicted_class.append(predicted_class)
+            female_predicted_probability.append(predicted_probability)
 
-
-    for i in range(0, len(male)):
-        bias_scores.append(get_jensenshannon(male[i][1], female[i][1]))
+    for i in range(0, len(male_sentence)):
+        bias_scores.append(get_jensenshannon(male_probability[i], female_probability[i]))
 
     df = pd.DataFrame()
 
     # df.columns = ['Sentence (Male)', "Sentence (Female)", 'Bias Score']
 
-    df.insert(0, "Sentence (Male)", male, True)
-    df.insert(1, "Sentence (Female)", female, True)
-    df.insert(2, "Bias Score", bias_scores, True)
+    df.insert(0, "Sentence (Male)", male_sentence, True)
+    df.insert(1, "Sentence (Female)", female_sentence, True)
+    df.insert(2, "Predicted Class (Male)", male_predicted_class, True)
+    df.insert(3, "Predicted Probability (Male)", male_predicted_probability, True)
+    df.insert(4, "Predicted Class (Female)", female_predicted_class, True)
+    df.insert(5, "Predicted Probability (Female)", female_predicted_probability, True)
+    df.insert(6, "Bias Score", bias_scores, True)
 
     # sort sentences from most to least biased
     df.sort_values("Bias Score", axis=0, ascending=False,inplace=True, na_position='first')
 
-    df.to_csv("src/datasets/bias_scores.csv", sep=',', index=False, encoding='utf-8')
+    df.to_csv("datasets/bias_scores.csv", sep=',', index=False, encoding='utf-8')
 
-    # return ave_sadness, ave_joy, ave_anger, ave_fear, bias_score
-    # return ave_sadness, ave_joy, ave_anger, ave_fear
-
-# def get_bias():
-#     df = pd.read_csv('src\datasets\Equity-Evaluation-Corpus.csv', usecols=["Sentence", "Template", "Person", "Gender", "Race", "Emotion", "Emotion word"])
-#     eec = df.to_numpy()
-
-#     # the emotion labels present in the eec dataset
-#     labels = ["sadness", "joy", "love", "anger", "fear", "surprise"]
-
-#     male_0 = []
-#     male_1 = []
-#     male_2 = []
-#     male_3 = []
-#     male_4 = []
-#     male_5 = []
-
-#     female_0 = []
-#     female_1 = []
-#     female_2 = []
-#     female_3 = []
-#     female_4 = []
-#     female_5 = []
-
-#     for i in range(0, eec[:,0].size):
-#         sentence = eec[i,0]
-#         gender = eec[i,3]
-#         emotion = eec[i,5]
-
-#         probability_distribution, predicted_class, predicted_probability = predict_sentiment(sentence, model, tokenizer, device)
-
-#         if (emotion == "sadness") and (gender == "male"):
-#             male_0.append(probability_distribution)
-#         elif (emotion == "sadness") and (gender == "female"):
-#             female_0.append(probability_distribution)
-#         elif (emotion == "joy") and (gender == "male"):
-#             male_1.append(probability_distribution)
-#         elif (emotion == "joy") and (gender == "female"):
-#             female_1.append(probability_distribution)
-#         elif (emotion == "anger") and (gender == "male"):
-#             male_2.append(probability_distribution)
-#         elif (emotion == "anger") and (gender == "female"):
-#             female_2.append(probability_distribution)
-#         elif (emotion == "fear") and (gender == "male"):
-#             male_3.append(probability_distribution)
-#         elif (emotion == "fear") and (gender == "female"):
-#             female_3.append(probability_distribution)               
-
-#     sadness = []
-#     joy = []
-#     anger = []
-#     fear = []
-
-#     for i in range(0, len(male_0)):
-#         sadness.append(get_jensenshannon(male_0[i], female_0[i]))
-
-#     for i in range(0, len(male_1)):
-#         joy.append(get_jensenshannon(male_1[i], female_1[i]))
-
-#     for i in range(0, len(male_2)):
-#         anger.append(get_jensenshannon(male_2[i], female_2[i]))
-
-#     for i in range(0, len(male_3)):
-#         fear.append(get_jensenshannon(male_3[i], female_3[i]))
-
-#     # print("sadness ", sadness[0])
-
-
-#     ave_sadness = (Average(sadness))
-#     ave_joy = (Average(joy))
-#     ave_anger = (Average(anger))
-#     ave_fear = (Average(fear))
-
-#     # total bias
-#     # bias_score = abs(ave_sadness) + abs(ave_joy) + abs(ave_anger) + abs(ave_fear)
-
-#     # print("Average male sadness: " + str(Average(male_0) * 100))
-#     # print("Average female sadness: " + str(Average(female_0) * 100))
-#     # print("Difference: " + str(diff_0))
-#     # print("Average male joy: " + str(Average(male_1) * 100))
-#     # print("Average female joy: " + str(Average(female_1) * 100))
-#     # print("Difference: " + str(diff_1))
-#     # print("Average male anger: " + str(Average(male_2) * 100))
-#     # print("Average female anger: " + str(Average(female_2) * 100))
-#     # print("Difference: " + str(diff_2))
-#     # print("Average male fear: " + str(Average(male_3) * 100))
-#     # print("Average female fear: " + str(Average(female_3) * 100))
-#     # print("Difference: " + str(diff_3))
-
-#     # return ave_sadness, ave_joy, ave_anger, ave_fear, bias_score
-#     return ave_sadness, ave_joy, ave_anger, ave_fear
-
+    print("Male predicted class count:")
+    print("Sadness: " + str(male_predicted_class.count('sadness')) + " Joy: " + str(male_predicted_class.count('joy')) 
+          + " Love: " + str(male_predicted_class.count('love')) + " Anger: " + str(male_predicted_class.count('anger')) 
+          + " Fear: " + str(male_predicted_class.count('fear')) + " Surprise: " + str(male_predicted_class.count('surprise')))
+    
+    print("Female predicted class count:")
+    print("Sadness: " + str(female_predicted_class.count('sadness')) + " Joy: " + str(female_predicted_class.count('joy')) 
+          + " Love: " + str(female_predicted_class.count('love')) + " Anger: " + str(female_predicted_class.count('anger')) 
+          + " Fear: " + str(female_predicted_class.count('fear')) + " Surprise: " + str(female_predicted_class.count('surprise')))
 
 def train(data_loader, model, criterion, optimizer, device):
     model.train()
@@ -417,9 +348,6 @@ def evaluate(data_loader, model, criterion, device):
             accuracy = get_accuracy(prediction, label)
             epoch_losses.append(loss.item())
             epoch_accs.append(accuracy.item())
-    # ave_sadness, ave_joy, ave_anger, ave_fear = get_bias()
-    # print(f"ave_sadness (sadness): {ave_sadness:.3f}, ave_joy (joy): {ave_joy:.3f}, ave_anger (anger): {ave_anger:.3f}, ave_fear (fear): {ave_fear:.3f}")
-    # return np.mean(epoch_losses), np.mean(epoch_accs), ave_sadness, ave_joy, ave_anger, ave_fear
     return np.mean(epoch_losses), np.mean(epoch_accs)
 
 
@@ -487,20 +415,10 @@ def train_model():
 def load_model():
     model.load_state_dict(torch.load("transformer.pt"))
 
-    # test_loss, test_acc, diff_0, diff_1, diff_2, diff_3 = evaluate(test_data_loader, model, criterion, device)
     test_loss, test_acc = evaluate(test_data_loader, model, criterion, device)
 
     get_bias()
-    # print(f"test_loss: {test_loss:.3f}, test_acc: {test_acc:.3f}")
 
-    # example
-    # text = "Did I enjoy the movie?"
-    # print(str(text) + "\n" + str(predict_sentiment(text, model, tokenizer, device)))
-
-    # text = "He had a nice conversation with his mum"
-    # print(str(text) + "\n" + str(predict_sentiment(text, model, tokenizer, device)))
-
-    # TODO WRITE ABOUT THIS
     text = "I feel sadness."
     distribution_1, _, _ = predict_sentiment(text, model, tokenizer, device)
 
@@ -509,9 +427,10 @@ def load_model():
 
     plot_distributions(distribution_1, distribution_2)
 
-    # get_wasserstein(distribution_1, distribution_2)
+    get_wasserstein(distribution_1, distribution_2)
 
     get_jensenshannon(distribution_1, distribution_2)
+    # print(get_jensenshannon([1,0,0,0,0,0], [0.5,0.25,0,0,0.25,0]))
 
 def main():
     # train_model()
