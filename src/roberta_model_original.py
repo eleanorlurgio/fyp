@@ -17,36 +17,28 @@ import tqdm
 import transformers
 from transformers import AutoTokenizer
 
-# Set a fixed value for the random seed to ensure reproducible results
-SEED = 1234
-# Determine whether a CUDA-compatible GPU is available, and use it if so; otherwise, use the CPU
-DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+SEED = 1234 # set random seed to a fixed value to ensure reproducible results
 
-# Apply the fixed random seed to PyTorch to ensure consistent initialization and random operations
-torch.manual_seed(SEED)
-# Ensure that any operations performed by cuDNN (a GPU-acceleration library used by PyTorch) are deterministic,
-# which can help in reproducing results but may reduce performance
-torch.backends.cudnn.deterministic = True
+DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu") # determine whether a CUDA-compatible GPU is available, and use it if so; otherwise, use the CPU
 
+torch.manual_seed(SEED) # apply the fixed random seed to PyTorch to ensure consistent initialization and random operations
+
+torch.backends.cudnn.deterministic = True # ensure that any operations performed by cuDNN are deterministic,helping in reproducing results but may reduce performance
 
 print("PyTorch Version: ", torch.__version__)
 print("torchtext Version: ", torchtext.__version__)
 print("transformers Version: ", transformers.__version__)
 print(f"Using {'GPU' if str(DEVICE) == 'cuda' else 'CPU'}.")
 
-tokenizer = AutoTokenizer.from_pretrained("roberta-base")
+tokenizer = AutoTokenizer.from_pretrained("roberta-base") # load roberta-base autotokenizer
 
-max_input_length = tokenizer.max_model_input_sizes['roberta-base']
-print(max_input_length)
+max_input_length = tokenizer.max_model_input_sizes['roberta-base'] # max input size of roberta-base is 512
 
-# using the split version of the dataset
-dataset = load_dataset("dair-ai/emotion", "split")
+dataset = load_dataset("dair-ai/emotion", "split") # load the split version of the emotion dataset
 
 train_data = dataset["train"]
 valid_data = dataset["validation"]
 test_data = dataset["test"]
-
-# from torch.utils.data import random_split
 
 print("Full train data:", len(train_data))
 print("Full val data:", len(valid_data))
@@ -54,7 +46,7 @@ print("Full test data:", len(test_data))
 
 tokenizer.convert_ids_to_tokens(tokenizer.encode("hello world"))
 
-def tokenize_and_numericalize(example, tokenizer):
+def tokenize_and_numericalize(example, tokenizer): # tokenize and turn into ids
     ids = tokenizer(example["text"], truncation=True)["input_ids"]
     return {"ids": ids}
 
@@ -78,7 +70,7 @@ valid_data = valid_data.with_format(type="torch", columns=["ids", "label"])
 test_data = test_data.with_format(type="torch", columns=["ids", "label"])
 
 
-def get_collate_fn(pad_index):
+def get_collate_fn(pad_index): # collate batches
     def collate_fn(batch):
         batch_ids = [i["ids"] for i in batch]
         batch_ids = nn.utils.rnn.pad_sequence(
@@ -91,7 +83,7 @@ def get_collate_fn(pad_index):
 
     return collate_fn
 
-def get_data_loader(dataset, batch_size, pad_index, shuffle=False):
+def get_data_loader(dataset, batch_size, pad_index, shuffle=False): # configure data loader
     collate_fn = get_collate_fn(pad_index)
     data_loader = torch.utils.data.DataLoader(
         dataset=dataset,
@@ -102,28 +94,23 @@ def get_data_loader(dataset, batch_size, pad_index, shuffle=False):
     return data_loader
 
 
-batch_size = 32
+batch_size = 32 # set batch size
 
-train_data_loader = get_data_loader(train_data, batch_size, pad_index, shuffle=True)
-valid_data_loader = get_data_loader(valid_data, batch_size, pad_index)
-test_data_loader = get_data_loader(test_data, batch_size, pad_index)
+train_data_loader = get_data_loader(train_data, batch_size, pad_index, shuffle=True) # create train data loader
+valid_data_loader = get_data_loader(valid_data, batch_size, pad_index) # create validation data loader
+test_data_loader = get_data_loader(test_data, batch_size, pad_index) # create test data loader
 
-# ids = [batch size, seq len]
-# hidden = [batch size, seq len, hidden dim]
-# attention = [batch size, n heads, seq len, seq len]
-# prediction = [batch size, output dim]
-
-class Transformer(nn.Module):
+class Transformer(nn.Module): # define transformer model
     def __init__(self, transformer, output_dim, freeze):
         super().__init__()
         self.transformer = transformer
         hidden_dim = transformer.config.hidden_size
-        self.fc = nn.Linear(hidden_dim, output_dim)
+        self.fc = nn.Linear(hidden_dim, output_dim) # add linear layer
         if freeze:
             for param in self.transformer.parameters():
                 param.requires_grad = False
 
-    def forward(self, ids):
+    def forward(self, ids): # define forward function
         output = self.transformer(ids, output_attentions=True)
         hidden = output.last_hidden_state
         attention = output.attentions[-1]
@@ -131,50 +118,43 @@ class Transformer(nn.Module):
         prediction = self.fc(torch.tanh(cls_hidden))
         return prediction
 
-
-transformer = transformers.AutoModel.from_pretrained("roberta-base")
+transformer = transformers.AutoModel.from_pretrained("roberta-base") # import pretrained roberta-base model
 
 output_dim = len(train_data["label"].unique())
 freeze = False
 
-model = Transformer(transformer, output_dim, freeze)
-
+model = Transformer(transformer, output_dim, freeze) # create model using pretrained roberta-base model
 
 def count_parameters(model):
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
 
+print(f"The model has {count_parameters(model):,} trainable parameters") # display number of trainable parameters
 
-print(f"The model has {count_parameters(model):,} trainable parameters")
+optimizer = optim.Adam(model.parameters(), lr=1e-5) # define optimizer and learning rate
+criterion = nn.CrossEntropyLoss() # define loss function
 
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu") # find GPU else use CPU
 
-optimizer = optim.Adam(model.parameters(), lr=1e-5)
-criterion = nn.CrossEntropyLoss()
+model = model.to(device) # push model to GPU
+criterion = criterion.to(device) # push loss function to GPU
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-model = model.to(device)
-criterion = criterion.to(device)
-
-def Average(list): 
+def Average(list): # util to find average of a list
     if len(list) != 0:
         return sum(list) / len(list)
     else:
         return 0
 
-def predict_sentiment(text, model, tokenizer, device):
+def predict_sentiment(text, model, tokenizer, device): # use model to predict sentiment of a given text
     ids = tokenizer(text)["input_ids"]
     tensor = torch.LongTensor(ids).unsqueeze(dim=0).to(device)
-    # predictions
-    prediction = model(tensor).squeeze(dim=0)
-    predicted_class = prediction.argmax(dim=-1).item()
 
-    # probabilities
-    probability = torch.softmax(prediction, dim=-1)
+    prediction = model(tensor).squeeze(dim=0) # predictions
+    predicted_class = prediction.argmax(dim=-1).item() # highest predicted class
 
-    predicted_probability = probability[predicted_class].item()
+    probability = torch.softmax(prediction, dim=-1) # probability distribution
+    predicted_probability = probability[predicted_class].item() # highest probability
 
-    # convert predicted_class to its text label
-    labels = ["sadness", "joy", "love", "anger", "fear", "surprise"]
+    labels = ["sadness", "joy", "love", "anger", "fear", "surprise"] # convert predicted_class to its text label
 
     if predicted_class == 0:
         predicted_class = labels[0]
@@ -191,19 +171,19 @@ def predict_sentiment(text, model, tokenizer, device):
 
     plt.clf()
 
-    plt.figure(figsize=(4.5, 4))
+    plt.figure(figsize=(4.5, 4)) # create graph to show probability distribution
     plt.bar(labels, probability.cpu().detach().numpy(), color = "darkblue", edgecolor = "black", width = 1)
     plt.title("Probability Distribution")
     plt.xlabel("Sentiment")
     plt.ylabel("Probability")
 
-    plt.savefig('probability_distribution.png')
+    plt.savefig('probability_distribution.png') # save graph
 
     plt.close()
 
     return probability.cpu().detach().numpy(), predicted_class, predicted_probability
 
-def plot_distributions(distribution_1, distribution_2):
+def plot_distributions(distribution_1, distribution_2): # plot graphs of two probability distributions
     labels = ["sadness", "joy", "love", "anger", "fear", "surprise"]
 
     plt.clf()
@@ -228,65 +208,58 @@ def plot_distributions(distribution_1, distribution_2):
 
     plt.close()
 
-
-# get wasserstein distance between two probability distributions
-def get_wasserstein(distribution_1, distribution_2):
+def get_wasserstein(distribution_1, distribution_2): # get wasserstein distance between two probability distributions
     wasserstein = wasserstein_distance(np.arange(6), np.arange(6), distribution_1, distribution_2)
-    # print(wasserstein)
     return wasserstein
 
-def get_jensenshannon(distribution_1, distribution_2):
+def get_jensenshannon(distribution_1, distribution_2): # get jensen shannon distance between two probability distributions
     jensenshannon = distance.jensenshannon(distribution_1, distribution_2)
-    # print(jensenshannon)
     return jensenshannon
 
-def get_accuracy(prediction, label):
+def get_accuracy(prediction, label): # calculate accuracy metric
     batch_size, _ = prediction.shape
     predicted_classes = prediction.argmax(dim=-1)
     correct_predictions = predicted_classes.eq(label).sum()
     accuracy = correct_predictions / batch_size
     return accuracy
 
-def get_precision_score(prediction, label):
+def get_precision_score(prediction, label): # calculate precision metric
     predicted_classes = prediction.argmax(dim=-1)
     return precision_score(label.cpu(), predicted_classes.cpu(), average="weighted", zero_division=1.0)
 
-def get_recall_score(prediction, label):
+def get_recall_score(prediction, label): # calculate recall metric
     predicted_classes = prediction.argmax(dim=-1)
     return recall_score(label.cpu(), predicted_classes.cpu(), average="weighted", zero_division=1.0)
 
-def get_f1_score(prediction, label):
+def get_f1_score(prediction, label): # calculate f1 metric
     predicted_classes = prediction.argmax(dim=-1)
     return f1_score(label.cpu(), predicted_classes.cpu(), average="weighted", zero_division=1.0)
 
-# find jensen shannon distances for each sentence pair
-def get_bias():
-    df = pd.read_csv('datasets\Equity-Evaluation-Corpus.csv', usecols=["Sentence", "Template", "Person", "Gender", "Race", "Emotion", "Emotion word"])
-    eec = df.to_numpy()
+def get_bias(): # evaluate bias of model
+    df = pd.read_csv('datasets\Equity-Evaluation-Corpus.csv', usecols=["Sentence", "Template", "Person", "Gender", "Race", "Emotion", "Emotion word"]) # load EEC dataset
+    eec = df.to_numpy() # convert dataframe to numpy array
 
-    # the emotion labels present in the eec dataset
-    labels = ["sadness", "joy", "love", "anger", "fear", "surprise"]
+    labels = ["sadness", "joy", "love", "anger", "fear", "surprise"] # all six emotion labels present in the EEC dataset
 
-    male_sentence = []
-    female_sentence = []
+    male_sentence = [] # stores all sentences with male label
+    female_sentence = [] # stores all sentences with female label
 
-    male_probability = []
-    female_probability = []
+    male_probability = [] # stores all probability distributions generated for sentences with male label
+    female_probability = [] # stores all probability distributions generated for sentences with female label
 
-    male_predicted_class = []
-    female_predicted_class = []
+    male_predicted_class = [] # stores all predicted classes generated for sentences with male label
+    female_predicted_class = [] # stores all predicted classes generated for sentences with female label
 
-    male_predicted_probability = []
-    female_predicted_probability = []
+    male_predicted_probability = [] # stores all predicted probabilities generated for sentences with male label
+    female_predicted_probability = [] # stores all predicted probabilities generated for sentences with female label
 
-    bias_scores = []
+    bias_scores = [] # stores the counterfactual bias scores generated between each pair of sentences
 
-    for i in range(0, eec[:,0].size):
+    for i in range(0, eec[:,0].size): # loop through each sentence of the dataset
         sentence = eec[i,0]
         gender = eec[i,3]
-        emotion = eec[i,5]
 
-        probability_distribution, predicted_class, predicted_probability = predict_sentiment(sentence, model, tokenizer, device)
+        probability_distribution, predicted_class, predicted_probability = predict_sentiment(sentence, model, tokenizer, device) # predict sentiment of sentence
 
         if gender == "male":
             male_sentence.append(sentence)
@@ -299,12 +272,10 @@ def get_bias():
             female_predicted_class.append(predicted_class)
             female_predicted_probability.append(predicted_probability)
 
-    for i in range(0, len(male_sentence)):
+    for i in range(0, len(male_sentence)): # for each male sentence, calculate the counterfactual bias score between it and its female counterpart
         bias_scores.append(get_jensenshannon(male_probability[i], female_probability[i]))
 
-    df = pd.DataFrame()
-
-    # df.columns = ['Sentence (Male)', "Sentence (Female)", 'Bias Score']
+    df = pd.DataFrame() # create dataframe to store all predictions and bias results
 
     df.insert(0, "Sentence (Male)", male_sentence, True)
     df.insert(1, "Sentence (Female)", female_sentence, True)
@@ -314,41 +285,28 @@ def get_bias():
     df.insert(5, "Predicted Probability (Female)", female_predicted_probability, True)
     df.insert(6, "Bias Score", bias_scores, True)
 
-    # sort sentences from most to least biased
-    df.sort_values("Bias Score", axis=0, ascending=False,inplace=True, na_position='first')
+    df.sort_values("Bias Score", axis=0, ascending=False,inplace=True, na_position='first') # sort sentences from most to least biased
 
-    output_dir = Path("results/model_1")
-    output_dir.mkdir(parents=True, exist_ok=True)
+    output_dir = Path("results/model_1") # set output directory
+    output_dir.mkdir(parents=True, exist_ok=True) # make output directory if it doesn't exist
 
-    df.to_csv(output_dir / "bias_scores.csv", sep=',', index=False, encoding='utf-8')
+    df.to_csv(output_dir / "bias_scores.csv", sep=',', index=False, encoding='utf-8') # save dataframe to csv file
 
-    # make dataframe to store the class counts for male and female
+    df_count = pd.DataFrame(index=range(6),columns=range(3)) # make dataframe to store the class counts for male and female
 
     male_class_count = [male_predicted_class.count('sadness'), male_predicted_class.count('joy'), 
-    male_predicted_class.count('love'), male_predicted_class.count('anger'), 
-    male_predicted_class.count('fear'), male_predicted_class.count('surprise')]
+        male_predicted_class.count('love'), male_predicted_class.count('anger'), 
+        male_predicted_class.count('fear'), male_predicted_class.count('surprise')] # count how many male sentences were predicted for each class
 
     female_class_count = [female_predicted_class.count('sadness'), female_predicted_class.count('joy'), 
-    female_predicted_class.count('love'), female_predicted_class.count('anger'), 
-    female_predicted_class.count('fear'), female_predicted_class.count('surprise')]
-
-    df_count = pd.DataFrame(index=range(6),columns=range(3))
+        female_predicted_class.count('love'), female_predicted_class.count('anger'), 
+        female_predicted_class.count('fear'), female_predicted_class.count('surprise')] # count how many female sentences were predicted for each class
 
     df_count.insert(0, "Class", labels, True)
     df_count.insert(1, "Male Predicted Class Count", male_class_count, True)
     df_count.insert(2, "Female Predicted Class Count", female_class_count, True)
 
-    df_count.to_csv(output_dir / "bias_class_counts.csv", sep=',', index=False, encoding='utf-8')
-
-    print("Male predicted class count:")
-    print("Sadness: " + str(male_predicted_class.count('sadness')) + " Joy: " + str(male_predicted_class.count('joy')) 
-          + " Love: " + str(male_predicted_class.count('love')) + " Anger: " + str(male_predicted_class.count('anger')) 
-          + " Fear: " + str(male_predicted_class.count('fear')) + " Surprise: " + str(male_predicted_class.count('surprise')))
-    
-    print("Female predicted class count:")
-    print("Sadness: " + str(female_predicted_class.count('sadness')) + " Joy: " + str(female_predicted_class.count('joy')) 
-          + " Love: " + str(female_predicted_class.count('love')) + " Anger: " + str(female_predicted_class.count('anger')) 
-          + " Fear: " + str(female_predicted_class.count('fear')) + " Surprise: " + str(female_predicted_class.count('surprise')))
+    df_count.to_csv(output_dir / "bias_class_counts.csv", sep=',', index=False, encoding='utf-8') # save dataframe to csv file
 
 def train(data_loader, model, criterion, optimizer, device):
     model.train()
@@ -412,8 +370,7 @@ def train_model():
         print(f"valid_loss: {valid_loss:.3f}, valid_acc: {valid_acc:.3f}")
         print(f"precision: {precision}, recall: {recall}, f1_score: {f1_score}")
 
-    # dataframe to save results to
-    df = pd.DataFrame()
+    df = pd.DataFrame() # create dataframe to save all results
 
     df.insert(0, "Train Loss", metrics["train_losses"], True)
     df.insert(1, "Train Accuracy", metrics["train_accs"], True)
@@ -426,10 +383,9 @@ def train_model():
     output_dir = Path("results/model_1")
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    df.to_csv(output_dir / "results.csv", sep=',', index=False, encoding='utf-8')
+    df.to_csv(output_dir / "results.csv", sep=',', index=False, encoding='utf-8') # save dataframe to csv file
 
-    # plot graph of accuracy and loss
-    fig = plt.figure(figsize=(10, 6))
+    fig = plt.figure(figsize=(10, 6)) # create graph showing accuracy and loss metrics
     ax = fig.add_subplot(1, 1, 1)
     ax.plot(metrics["train_accs"], label="train accuracy")
     ax.plot(metrics["valid_accs"], label="valid accuracy")
@@ -441,11 +397,11 @@ def train_model():
     ax.legend()
     ax.grid()
 
-    plt.savefig(output_dir / 'accuracy_loss.png')
+    plt.savefig(output_dir / 'accuracy_loss.png') # save graph
 
     plt.clf()
 
-    fig = plt.figure(figsize=(10, 6))
+    fig = plt.figure(figsize=(10, 6)) # create graph showing precision, recall and f1_score
     ax = fig.add_subplot(1, 1, 1)
     ax.plot(metrics["precision"], label="precision")
     ax.plot(metrics["recall"], label="recall")
@@ -456,20 +412,20 @@ def train_model():
     ax.legend()
     ax.grid()
 
-    plt.savefig(output_dir / 'f1_score.png')
+    plt.savefig(output_dir / 'f1_score.png') # save graph
 
 
 def load_model():
-    model.load_state_dict(torch.load("transformer.pt"))
+    model.load_state_dict(torch.load("transformer.pt")) # load previously trained model from memory
 
     metrics = collections.defaultdict(list)
 
-    test_loss, test_acc, precision, recall, f1_score = evaluate(test_data_loader, model, criterion, device)
+    test_loss, test_acc, precision, recall, f1_score = evaluate(test_data_loader, model, criterion, device) # evaluate model
     metrics["test_losses"].append(test_loss)
     metrics["test_accs"].append(test_acc)
-    print(f"test_loss: {test_loss:.3f}, test_acc: {test_acc:.3f}")
+    print(f"test_loss: {test_loss:.3f}, test_acc: {test_acc:.3f}") # show test loss and test accuracy
 
-    get_bias()
+    get_bias() # evaluate bias of model
 
     text = "I feel sadness."
     distribution_1, _, _ = predict_sentiment(text, model, tokenizer, device)
@@ -482,7 +438,7 @@ def load_model():
     get_wasserstein(distribution_1, distribution_2)
 
     get_jensenshannon(distribution_1, distribution_2)
-    # print(get_jensenshannon([1,0,0,0,0,0], [0.5,0.25,0,0,0.25,0]))
+
 
 def main():
     # train_model()
