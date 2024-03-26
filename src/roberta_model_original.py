@@ -4,6 +4,7 @@ from datasets import load_dataset
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from pathlib import Path
 import scipy
 from scipy.spatial import distance
 from scipy.stats import wasserstein_distance
@@ -246,14 +247,17 @@ def get_accuracy(prediction, label):
     accuracy = correct_predictions / batch_size
     return accuracy
 
-# TODO get_precision, get_recall, get_f1, get_confusion_matrix
 def get_precision_score(prediction, label):
     predicted_classes = prediction.argmax(dim=-1)
-    return precision_score(label.cpu(), predicted_classes.cpu(), average="weighted")
+    return precision_score(label.cpu(), predicted_classes.cpu(), average="weighted", zero_division=1.0)
 
 def get_recall_score(prediction, label):
     predicted_classes = prediction.argmax(dim=-1)
-    return recall_score(label.cpu(), predicted_classes.cpu(), average="weighted")
+    return recall_score(label.cpu(), predicted_classes.cpu(), average="weighted", zero_division=1.0)
+
+def get_f1_score(prediction, label):
+    predicted_classes = prediction.argmax(dim=-1)
+    return f1_score(label.cpu(), predicted_classes.cpu(), average="weighted", zero_division=1.0)
 
 # find jensen shannon distances for each sentence pair
 def get_bias():
@@ -313,7 +317,28 @@ def get_bias():
     # sort sentences from most to least biased
     df.sort_values("Bias Score", axis=0, ascending=False,inplace=True, na_position='first')
 
-    df.to_csv("datasets/bias_scores.csv", sep=',', index=False, encoding='utf-8')
+    output_dir = Path("results/model_1")
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    df.to_csv(output_dir / "bias_scores.csv", sep=',', index=False, encoding='utf-8')
+
+    # make dataframe to store the class counts for male and female
+
+    male_class_count = [male_predicted_class.count('sadness'), male_predicted_class.count('joy'), 
+    male_predicted_class.count('love'), male_predicted_class.count('anger'), 
+    male_predicted_class.count('fear'), male_predicted_class.count('surprise')]
+
+    female_class_count = [female_predicted_class.count('sadness'), female_predicted_class.count('joy'), 
+    female_predicted_class.count('love'), female_predicted_class.count('anger'), 
+    female_predicted_class.count('fear'), female_predicted_class.count('surprise')]
+
+    df_count = pd.DataFrame(index=range(6),columns=range(3))
+
+    df_count.insert(0, "Class", labels, True)
+    df_count.insert(1, "Male Predicted Class Count", male_class_count, True)
+    df_count.insert(2, "Female Predicted Class Count", female_class_count, True)
+
+    df_count.to_csv(output_dir / "bias_class_counts.csv", sep=',', index=False, encoding='utf-8')
 
     print("Male predicted class count:")
     print("Sadness: " + str(male_predicted_class.count('sadness')) + " Joy: " + str(male_predicted_class.count('joy')) 
@@ -346,8 +371,6 @@ def evaluate(data_loader, model, criterion, device):
     model.eval()
     epoch_losses = []
     epoch_accs = []
-    # epoch_precision = []
-    # epoch_recall = []
     with torch.no_grad():
         for batch in tqdm.tqdm(data_loader, desc="evaluating..."):
             ids = batch["ids"].to(device)
@@ -357,11 +380,10 @@ def evaluate(data_loader, model, criterion, device):
             accuracy = get_accuracy(prediction, label)
             precision = get_precision_score(prediction, label)
             recall = get_recall_score(prediction, label)
+            f1_score = get_f1_score(prediction, label)
             epoch_losses.append(loss.item())
             epoch_accs.append(accuracy.item())
-            # epoch_precision.append(precision.item())
-            # epoch_recall.append(recall.item())
-    return np.mean(epoch_losses), np.mean(epoch_accs), precision, recall
+    return np.mean(epoch_losses), np.mean(epoch_accs), precision, recall, f1_score
 
 
 def train_model():
@@ -374,22 +396,37 @@ def train_model():
         train_loss, train_acc = train(
             train_data_loader, model, criterion, optimizer, device
         )
-        valid_loss, valid_acc, precision, recall = evaluate(valid_data_loader, model, criterion, device)
+        valid_loss, valid_acc, precision, recall, f1_score = evaluate(valid_data_loader, model, criterion, device)
         metrics["train_losses"].append(train_loss)
         metrics["train_accs"].append(train_acc)
         metrics["valid_losses"].append(valid_loss)
         metrics["valid_accs"].append(valid_acc)
         metrics["precision"].append(precision)
         metrics["recall"].append(recall)
-        # metrics["bias_score"].append(bias_score)
+        metrics["f1_score"].append(f1_score)
         if valid_loss < best_valid_loss:
             best_valid_loss = valid_loss
             torch.save(model.state_dict(), "transformer.pt")
         print(f"epoch: {epoch}")
         print(f"train_loss: {train_loss:.3f}, train_acc: {train_acc:.3f}")
         print(f"valid_loss: {valid_loss:.3f}, valid_acc: {valid_acc:.3f}")
-        print(f"precision: {precision}, recall: {recall}")
-        # print(f"ave_sadness (sadness): {ave_sadness:.3f}, ave_joy (joy): {ave_joy:.3f}, ave_anger (anger): {ave_anger:.3f}, ave_fear (fear): {ave_fear:.3f}")
+        print(f"precision: {precision}, recall: {recall}, f1_score: {f1_score}")
+
+    # dataframe to save results to
+    df = pd.DataFrame()
+
+    df.insert(0, "Train Loss", metrics["train_losses"], True)
+    df.insert(1, "Train Accuracy", metrics["train_accs"], True)
+    df.insert(2, "Valid Loss", metrics["valid_losses"], True)
+    df.insert(3, "Valid Accuracy", metrics["valid_accs"], True)
+    df.insert(4, "Precision", metrics["precision"], True)
+    df.insert(5, "Recall", metrics["recall"], True)
+    df.insert(6, "F1 Score", metrics["f1_score"], True)
+
+    output_dir = Path("results/model_1")
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    df.to_csv(output_dir / "results.csv", sep=',', index=False, encoding='utf-8')
 
     # plot graph of accuracy and loss
     fig = plt.figure(figsize=(10, 6))
@@ -404,32 +441,35 @@ def train_model():
     ax.legend()
     ax.grid()
 
-    plt.savefig('train_roberta.png')
+    plt.savefig(output_dir / 'accuracy_loss.png')
 
     plt.clf()
 
-    # # plot graph of bias score
-    # fig2 = plt.figure(figsize=(10, 6))
-    # ax2 = fig2.add_subplot(1, 1, 1)
-    # ax.plot(metrics["ave_sadness"], label="ave_sadness")
-    # ax.plot(metrics["ave_joy"], label="ave_joy")
-    # ax.plot(metrics["ave_anger"], label="ave_anger")
-    # ax.plot(metrics["ave_fear"], label="ave_fear")
-    # ax2.set_xlabel("epoch")
-    # ax2.set_ylabel("bias score")
-    # ax2.set_xticks(range(n_epochs))
-    # # ax2.legend()
-    # ax2.grid()
+    fig = plt.figure(figsize=(10, 6))
+    ax = fig.add_subplot(1, 1, 1)
+    ax.plot(metrics["precision"], label="precision")
+    ax.plot(metrics["recall"], label="recall")
+    ax.plot(metrics["f1_score"], label="f1_score")
+    ax.set_xlabel("epoch")
+    ax.set_ylabel("score")
+    ax.set_xticks(range(n_epochs))
+    ax.legend()
+    ax.grid()
 
-    # plt.savefig('bias_roberta.png')
+    plt.savefig(output_dir / 'f1_score.png')
 
 
 def load_model():
     model.load_state_dict(torch.load("transformer.pt"))
 
-    test_loss, test_acc, precision, recall = evaluate(test_data_loader, model, criterion, device)
+    metrics = collections.defaultdict(list)
 
-    # get_bias()
+    test_loss, test_acc, precision, recall, f1_score = evaluate(test_data_loader, model, criterion, device)
+    metrics["test_losses"].append(test_loss)
+    metrics["test_accs"].append(test_acc)
+    print(f"test_loss: {test_loss:.3f}, test_acc: {test_acc:.3f}")
+
+    get_bias()
 
     text = "I feel sadness."
     distribution_1, _, _ = predict_sentiment(text, model, tokenizer, device)
@@ -445,8 +485,8 @@ def load_model():
     # print(get_jensenshannon([1,0,0,0,0,0], [0.5,0.25,0,0,0.25,0]))
 
 def main():
-    train_model()
-    # load_model()
+    # train_model()
+    load_model()
 
 main()
     
