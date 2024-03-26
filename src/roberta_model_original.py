@@ -7,6 +7,7 @@ import pandas as pd
 import scipy
 from scipy.spatial import distance
 from scipy.stats import wasserstein_distance
+from sklearn.metrics import precision_score, recall_score, f1_score, multilabel_confusion_matrix
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -227,7 +228,7 @@ def plot_distributions(distribution_1, distribution_2):
     plt.close()
 
 
-# TODO: get_wasserstein distance between two probability distributions
+# get wasserstein distance between two probability distributions
 def get_wasserstein(distribution_1, distribution_2):
     wasserstein = wasserstein_distance(np.arange(6), np.arange(6), distribution_1, distribution_2)
     # print(wasserstein)
@@ -246,7 +247,13 @@ def get_accuracy(prediction, label):
     return accuracy
 
 # TODO get_precision, get_recall, get_f1, get_confusion_matrix
+def get_precision_score(prediction, label):
+    predicted_classes = prediction.argmax(dim=-1)
+    return precision_score(label.cpu(), predicted_classes.cpu(), average="weighted")
 
+def get_recall_score(prediction, label):
+    predicted_classes = prediction.argmax(dim=-1)
+    return recall_score(label.cpu(), predicted_classes.cpu(), average="weighted")
 
 # find jensen shannon distances for each sentence pair
 def get_bias():
@@ -339,6 +346,8 @@ def evaluate(data_loader, model, criterion, device):
     model.eval()
     epoch_losses = []
     epoch_accs = []
+    # epoch_precision = []
+    # epoch_recall = []
     with torch.no_grad():
         for batch in tqdm.tqdm(data_loader, desc="evaluating..."):
             ids = batch["ids"].to(device)
@@ -346,13 +355,17 @@ def evaluate(data_loader, model, criterion, device):
             prediction = model(ids)
             loss = criterion(prediction, label)
             accuracy = get_accuracy(prediction, label)
+            precision = get_precision_score(prediction, label)
+            recall = get_recall_score(prediction, label)
             epoch_losses.append(loss.item())
             epoch_accs.append(accuracy.item())
-    return np.mean(epoch_losses), np.mean(epoch_accs)
+            # epoch_precision.append(precision.item())
+            # epoch_recall.append(recall.item())
+    return np.mean(epoch_losses), np.mean(epoch_accs), precision, recall
 
 
 def train_model():
-    n_epochs = 10
+    n_epochs = 1
     best_valid_loss = float("inf")
 
     metrics = collections.defaultdict(list)
@@ -361,15 +374,13 @@ def train_model():
         train_loss, train_acc = train(
             train_data_loader, model, criterion, optimizer, device
         )
-        valid_loss, valid_acc, ave_sadness, ave_joy, ave_anger, ave_fear = evaluate(valid_data_loader, model, criterion, device)
+        valid_loss, valid_acc, precision, recall = evaluate(valid_data_loader, model, criterion, device)
         metrics["train_losses"].append(train_loss)
         metrics["train_accs"].append(train_acc)
         metrics["valid_losses"].append(valid_loss)
         metrics["valid_accs"].append(valid_acc)
-        metrics["ave_sadness"].append(ave_sadness)
-        metrics["ave_joy"].append(ave_joy)
-        metrics["ave_anger"].append(ave_anger)
-        metrics["ave_fear"].append(ave_fear)
+        metrics["precision"].append(precision)
+        metrics["recall"].append(recall)
         # metrics["bias_score"].append(bias_score)
         if valid_loss < best_valid_loss:
             best_valid_loss = valid_loss
@@ -377,6 +388,7 @@ def train_model():
         print(f"epoch: {epoch}")
         print(f"train_loss: {train_loss:.3f}, train_acc: {train_acc:.3f}")
         print(f"valid_loss: {valid_loss:.3f}, valid_acc: {valid_acc:.3f}")
+        print(f"precision: {precision}, recall: {recall}")
         # print(f"ave_sadness (sadness): {ave_sadness:.3f}, ave_joy (joy): {ave_joy:.3f}, ave_anger (anger): {ave_anger:.3f}, ave_fear (fear): {ave_fear:.3f}")
 
     # plot graph of accuracy and loss
@@ -415,9 +427,9 @@ def train_model():
 def load_model():
     model.load_state_dict(torch.load("transformer.pt"))
 
-    test_loss, test_acc = evaluate(test_data_loader, model, criterion, device)
+    test_loss, test_acc, precision, recall = evaluate(test_data_loader, model, criterion, device)
 
-    get_bias()
+    # get_bias()
 
     text = "I feel sadness."
     distribution_1, _, _ = predict_sentiment(text, model, tokenizer, device)
@@ -433,8 +445,8 @@ def load_model():
     # print(get_jensenshannon([1,0,0,0,0,0], [0.5,0.25,0,0,0.25,0]))
 
 def main():
-    # train_model()
-    load_model()
+    train_model()
+    # load_model()
 
 main()
     
