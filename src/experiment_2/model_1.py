@@ -23,7 +23,7 @@ import scipy
 from scipy.spatial import distance
 from scipy.stats import wasserstein_distance
 from sklearn.ensemble import RandomForestClassifier 
-from sklearn.metrics import precision_score, recall_score, f1_score, multilabel_confusion_matrix
+from sklearn.metrics import precision_score, recall_score, f1_score, confusion_matrix
 from sklearn.model_selection import cross_val_score
 from sklearn.preprocessing import StandardScaler 
 import torch
@@ -255,6 +255,21 @@ def get_f1_score(prediction, label): # calculate f1 metric
     predicted_classes = prediction.argmax(dim=-1)
     return f1_score(label.cpu(), predicted_classes.cpu(), average="weighted", zero_division=1.0)
 
+def get_confusion_matrix(prediction, label): # generate confusion matrix
+    predicted_classes = prediction.argmax(dim=-1)
+    return confusion_matrix(label.cpu(), predicted_classes.cpu(), labels=[0, 1, 2, 3, 4, 5])
+
+def get_incorrect_predictions(ids, prediction, label): # get wrong predictions
+    predicted_classes = prediction.argmax(dim=-1)
+    for input, prediction, label in zip(ids, predicted_classes, label):
+        if prediction != label:
+            text = tokenizer.decode(input.cpu().detach().numpy())
+            text = text.replace('[PAD]', '')
+            text = text.replace('[CLS]', '')
+            text = text.replace('[SEP]', '')
+            text = text.strip()
+            print(text, 'has been classified as ', prediction.cpu().detach().numpy(), 'and should be ', label.cpu().detach().numpy()) 
+
 def get_bias(): # evaluate bias of model
     df = pd.read_csv('datasets\Equity-Evaluation-Corpus.csv', usecols=["Sentence", "Template", "Person", "Gender", "Race", "Emotion", "Emotion word"]) # load EEC dataset
     eec = df.to_numpy() # convert dataframe to numpy array
@@ -349,19 +364,29 @@ def evaluate(data_loader, model, criterion, device):
     model.eval()
     epoch_losses = []
     epoch_accs = []
+    epoch_precision = []
+    epoch_recall = []
+    epoch_f1 = []
+    matrices = []
     with torch.no_grad():
         for batch in tqdm.tqdm(data_loader, desc="evaluating..."):
             ids = batch["ids"].to(device)
             label = batch["label"].to(device)
             prediction = model(ids)
+            get_incorrect_predictions(ids, prediction, label)
             loss = criterion(prediction, label)
             accuracy = get_accuracy(prediction, label)
             precision = get_precision_score(prediction, label)
             recall = get_recall_score(prediction, label)
             f1_score = get_f1_score(prediction, label)
+            confusion_matrix = get_confusion_matrix(prediction, label)
             epoch_losses.append(loss.item())
             epoch_accs.append(accuracy.item())
-    return np.mean(epoch_losses), np.mean(epoch_accs), precision, recall, f1_score
+            epoch_precision.append(precision.item())
+            epoch_recall.append(recall.item())
+            epoch_f1.append(f1_score.item())
+            matrices.append(confusion_matrix)
+    return np.mean(epoch_losses), np.mean(epoch_accs), np.mean(precision), np.mean(recall), np.mean(f1_score), np.sum(matrices, axis=0)
 
 
 def train_model():
@@ -374,7 +399,7 @@ def train_model():
         train_loss, train_acc = train(
             train_data_loader, model, criterion, optimizer, device
         )
-        valid_loss, valid_acc, precision, recall, f1_score = evaluate(valid_data_loader, model, criterion, device)
+        valid_loss, valid_acc, precision, recall, f1_score, _ = evaluate(valid_data_loader, model, criterion, device)
         metrics["train_losses"].append(train_loss)
         metrics["train_accs"].append(train_acc)
         metrics["valid_losses"].append(valid_loss)
@@ -440,7 +465,7 @@ def load_model():
 
     metrics = collections.defaultdict(list)
 
-    test_loss, test_acc, precision, recall, f1_score = evaluate(test_data_loader, model, criterion, device) # evaluate model
+    test_loss, test_acc, precision, recall, f1_score, confusion_matrix = evaluate(test_data_loader, model, criterion, device) # evaluate model
     metrics["test_losses"].append(test_loss)
     metrics["test_accs"].append(test_acc)
     metrics["precision"].append(precision)
@@ -448,6 +473,7 @@ def load_model():
     metrics["f1_score"].append(f1_score)
     print(f"test_loss: {test_loss:.3f}, test_acc: {test_acc:.3f}") # show test loss and test accuracy
     print(f"precision: {precision:.3f}, recall: {recall:.3f}, f1_score: {f1_score:.3f}") # show precision, recall and f1_score
+    print(confusion_matrix)
 
     get_bias() # evaluate bias of model
 
