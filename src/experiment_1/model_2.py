@@ -465,7 +465,7 @@ def load_model():
     print(f"precision: {precision:.3f}, recall: {recall:.3f}, f1_score: {f1_score:.3f}") # show precision, recall and f1_score
     print(confusion_matrix)
 
-    # get_bias() # evaluate bias of model
+    get_bias() # evaluate bias of model
 
     text = "i feel blessed to know this family"
     distribution_1, _, _ = predict_sentiment(text, model, tokenizer, device)
