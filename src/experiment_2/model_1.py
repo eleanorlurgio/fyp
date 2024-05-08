@@ -491,7 +491,7 @@ def load_model():
 
 
 def main():
-    # train_model()
+    train_model()
     load_model()
 
 main()

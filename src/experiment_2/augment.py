@@ -86,32 +86,17 @@ def augment_data():
             outputs += text # add altered text to the new dataset
         else:
             outputs += original # add the original text to the new dataset
-
-        # print(outputs)
         
         return {'text': outputs} # return new altered dataset
 
     counterfactual_train_data = train_data.map(alter_data)
 
-    # print(counterfactual_train_data)
-
-    # len(counterfactual_train_data)
-
-    # print(len(counterfactual_train_data))
-
     total_train_data = concatenate_datasets([train_data, counterfactual_train_data]) # concatenate all original training samples with all new training samples
-
-    # print(total_train_data)
 
     train_data_df = pd.DataFrame(total_train_data) # convert dataset object to dataframe
 
     train_data_df = train_data_df.drop_duplicates() # remove any repeat rows in the dataset
 
-    # print(train_data_df)
-
     augmented_train_data = datasets.Dataset.from_pandas(train_data_df) # convert dataframe back to dataset object
-
-    # print(len(augmented_train_data))
-    # print(augmented_train_data)
 
     return augmented_train_data
