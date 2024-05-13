@@ -28,9 +28,11 @@ Summary of each file:
 
 Note - each file's 'main' function looks like this:
 
+```
 def main():
     train_model()
     load_model()
+```
 
 To only load the model without training from the beginning, comment or remove the train_model() line
 
