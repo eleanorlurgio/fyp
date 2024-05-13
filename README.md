@@ -14,6 +14,8 @@ pip install -r requirements.txt
 
 python .\src\experiment_1\model_1.py 
 
+### Make sure you are using a Python 3.11.0 interpretter
+
 Summary of each file:
 
 * experiment_1/model_1 = BERT model
