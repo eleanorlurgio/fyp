@@ -25,4 +25,11 @@ Summary of each file:
 * experiment_2/model_3 = DistilBERT model with augmented dataset (utilising the augment.py file)
 * experiment_2/model_4 = XLNet model with augmented dataset (utilising the augment.py file)
 
+
+Note: each file's 'main' function looks like this
+
+![alt text](image.png)
+
+To only load the model without training from the beginning, comment or remove the train_model() line
+
 3. View results inside of results folder

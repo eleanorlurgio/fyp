@@ -27,6 +27,7 @@ import tqdm
 import transformers
 from transformers import AutoTokenizer
 from transformers import XLNetTokenizer, XLNetModel
+from torchsummary import summary
 
 SEED = 1234 # set random seed to a fixed value to ensure reproducible results
 
@@ -135,6 +136,8 @@ output_dim = len(train_data["label"].unique())
 freeze = False
 
 model = Transformer(transformer, output_dim, freeze) # create model using pretrained xlnet-base-cased model
+
+print(summary(model,input_size=(768,),depth=1,batch_dim=1, dtypes=['torch.IntTensor']))
 
 def count_parameters(model):
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
