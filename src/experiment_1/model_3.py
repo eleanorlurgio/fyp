@@ -44,7 +44,7 @@ print(f"Using {'GPU' if str(DEVICE) == 'cuda' else 'CPU'}.")
 
 tokenizer = AutoTokenizer.from_pretrained('distilbert-base-uncased') # load distilbert-base-uncased autotokenizer
 
-max_input_length = tokenizer.max_model_input_sizes['distilbert-base-uncased'] # max input size of distilbert-base-uncased
+# max_input_length = tokenizer.max_model_input_sizes['distilbert-base-uncased'] # max input size of distilbert-base-uncased
 
 dataset = load_dataset("dair-ai/emotion", "split") # load the split version of the emotion dataset
 
@@ -367,7 +367,7 @@ def evaluate(data_loader, model, criterion, device):
             ids = batch["ids"].to(device)
             label = batch["label"].to(device)
             prediction = model(ids)
-            get_incorrect_predictions(ids, prediction, label)
+            # get_incorrect_predictions(ids, prediction, label)
             loss = criterion(prediction, label)
             accuracy = get_accuracy(prediction, label)
             precision = get_precision_score(prediction, label)

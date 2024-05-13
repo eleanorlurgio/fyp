@@ -45,7 +45,7 @@ print(f"Using {'GPU' if str(DEVICE) == 'cuda' else 'CPU'}.")
 
 tokenizer = XLNetTokenizer.from_pretrained('xlnet-base-cased') # load xlnet-base-cased autotokenizer
 
-max_input_length = tokenizer.max_model_input_sizes['xlnet-base-cased'] # max input size of xlnet-base-cased
+# max_input_length = tokenizer.max_model_input_sizes['xlnet-base-cased'] # max input size of xlnet-base-cased
 
 dataset = load_dataset("dair-ai/emotion", "split") # load the split version of the emotion dataset
 
@@ -366,7 +366,7 @@ def evaluate(data_loader, model, criterion, device):
             ids = batch["ids"].to(device)
             label = batch["label"].to(device)
             prediction = model(ids)
-            get_incorrect_predictions(ids, prediction, label)
+            # get_incorrect_predictions(ids, prediction, label)
             loss = criterion(prediction, label)
             accuracy = get_accuracy(prediction, label)
             precision = get_precision_score(prediction, label)

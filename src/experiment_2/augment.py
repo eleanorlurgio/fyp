@@ -7,8 +7,6 @@ import math
 import datasets
 from datasets import concatenate_datasets
 from datasets import load_dataset
-from hyperopt import tpe, hp, fmin, STATUS_OK,Trials
-from hyperopt.pyll.base import scope
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
